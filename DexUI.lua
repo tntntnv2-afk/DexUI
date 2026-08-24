@@ -1,3 +1,15 @@
+--[[
+	DexUI  -  a custom UI library for Roblox exploit scripts
+	Drop-in-shaped replacement for Obsidian: matches Library:CreateWindow / Window:AddTab /
+	Tab:AddLeftGroupbox / Box:AddToggle|AddSlider|AddDropdown|AddInput|AddButton|AddLabel|
+	AddDivider|AddKeyPicker, plus Toggles / Options global tables, Library:Notify,
+	Library:AddDraggableLabel, Library:Unload / OnUnload, and a SaveManager.
+
+	Goals over Obsidian:
+	  - Mobile-first: large touch targets, drag by header, pinch-free scaling, a floating
+	    open/close bubble, responsive sizing that fits phone screens.
+	  - Cleaner look: rounded cards, soft shadows, accent glow, smooth tweens.
+	  - Same API surface so existing scripts need (almost) no changes.
 
 	Load with:  local Library = loadstring(game:HttpGet("<raw url>/DexUI.lua"))()
 --]]
