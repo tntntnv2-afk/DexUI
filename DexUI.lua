@@ -162,6 +162,20 @@ local function Chevron(parent, size, themeKey)
 	return holder
 end
 -- simple vector icons, drawn so they always render and always match the theme
+local IconParts = setmetatable({}, { __mode = "k" })
+local function SetIconKey(root, key)
+	local parts = IconParts[root]
+	if not parts then return end
+	for _, pr in ipairs(parts) do
+		if pr.fill then
+			Library.Registry[pr.f] = { BackgroundColor3 = key }
+			pr.f.BackgroundColor3 = Library.Theme[key]
+		else
+			Library.Registry[pr.f] = { Color = key }
+			pr.f.Color = Library.Theme[key]
+		end
+	end
+end
 local function Icon(parent, name, size, themeKey)
 	size = size or 18
 	local key = themeKey or "FontDim"
@@ -214,12 +228,7 @@ local function Icon(parent, name, size, themeKey)
 	else
 		ring(14, 14, 0, 0, 1.5)
 	end
-	function root:SetKey(k)
-		for _, pr in ipairs(parts) do
-			if pr.fill then Library.Registry[pr.f] = { BackgroundColor3 = k } pr.f.BackgroundColor3 = Library.Theme[k]
-			else Library.Registry[pr.f] = { Color = k } pr.f.Color = Library.Theme[k] end
-		end
-	end
+	IconParts[root] = parts
 	return root
 end
 local function Hover(btn, normalKey, hoverKey)
@@ -769,13 +778,13 @@ function Library:CreateWindow(cfg)
 				Tween(t._btn, { BackgroundTransparency = 1 }, 0.12)
 				Tween(t._label, { TextColor3 = Library.Theme.FontDim }, 0.12)
 				if t._glyph:IsA("ImageLabel") then Tween(t._glyph, { ImageColor3 = Library.Theme.FontDim }, 0.12)
-				elseif t._glyph.SetKey then t._glyph:SetKey("FontDim") end
+				else SetIconKey(t._glyph, "FontDim") end
 			end
 			self.Page.Visible = true
 			Tween(self._btn, { BackgroundTransparency = 0 }, 0.12)
 			Tween(self._label, { TextColor3 = Library.Theme.Font }, 0.12)
 			if self._glyph:IsA("ImageLabel") then Tween(self._glyph, { ImageColor3 = Library.Theme.Accent }, 0.12)
-			elseif self._glyph.SetKey then self._glyph:SetKey("Accent") end
+			else SetIconKey(self._glyph, "Accent") end
 			pageTitle.Text = name
 			task.defer(function() Tween(titleBar, { Size = UDim2.fromOffset(math.clamp(pageTitle.TextBounds.X, 18, 140), 2) }, 0.22, Enum.EasingStyle.Quint) end)
 			window.ActiveTab = self
