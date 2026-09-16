@@ -402,51 +402,47 @@ end))
 
 function Library:Confirm(title, body, onYes, onNo)
 	if self._confirm then self._confirm:Destroy() end
-	local veil = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, ZIndex = 900, Active = true, Parent = PopupLayer })
+	local veil = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, AutoButtonColor = false, Text = "", ZIndex = 900, Parent = PopupLayer })
 	self._confirm = veil
-	Tween(veil, { BackgroundTransparency = 0.45 }, 0.15)
+	Tween(veil, { BackgroundTransparency = 0.6 }, 0.12)
 
-	local box = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(300, 132), Position = UDim2.new(0.5, 0, 0.5, 0), ZIndex = 901, Parent = veil })
+	local box = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(268, 118), Position = UDim2.new(0.5, 0, 0.5, 0), ZIndex = 901, Parent = veil })
 	self:AddToRegistry(box, { BackgroundColor3 = "Main" })
-	Corner(box, 12)
-	local st = Create("UIStroke", { Thickness = 1, Transparency = 0.2, Parent = box })
-	self:AddToRegistry(st, { Color = "OutlineStrong" })
+	Corner(box, 10)
+	local st = Create("UIStroke", { Thickness = 1, Parent = box })
+	self:AddToRegistry(st, { Color = "Outline" })
 
-	local t = Text(box, title or "are you sure?", 13, true); t.Position = UDim2.new(0, 18, 0, 18); t.Size = UDim2.new(1, -36, 0, 16); t.ZIndex = 902
+	local t = Text(box, title or "are you sure?", 12, true); t.Position = UDim2.new(0, 16, 0, 16); t.Size = UDim2.new(1, -32, 0, 15); t.ZIndex = 902
 	local d = Text(box, body or "", 11, false, "FontDim")
-	d.Position = UDim2.new(0, 18, 0, 40); d.Size = UDim2.new(1, -36, 0, 34); d.TextWrapped = true; d.TextYAlignment = Enum.TextYAlignment.Top; d.ZIndex = 902
+	d.Position = UDim2.new(0, 16, 0, 35); d.Size = UDim2.new(1, -32, 0, 30); d.TextWrapped = true; d.TextYAlignment = Enum.TextYAlignment.Top; d.ZIndex = 902
+	local rule = Create("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -37), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 902, Parent = box })
+	self:AddToRegistry(rule, { BackgroundColor3 = "Outline" })
 
-	local scale = Create("UIScale", { Scale = 0.94, Parent = box })
-	Tween(scale, { Scale = 1 }, 0.2, Enum.EasingStyle.Quint)
+	local scale = Create("UIScale", { Scale = 0.97, Parent = box })
+	Tween(scale, { Scale = 1 }, 0.14, Enum.EasingStyle.Quint)
 
 	local function close()
-		Tween(veil, { BackgroundTransparency = 1 }, 0.12)
-		Tween(scale, { Scale = 0.96 }, 0.12).Completed:Connect(function()
+		Tween(veil, { BackgroundTransparency = 1 }, 0.1)
+		Tween(scale, { Scale = 0.98 }, 0.1).Completed:Connect(function()
 			if veil.Parent then veil:Destroy() end
 			if self._confirm == veil then self._confirm = nil end
 		end)
 	end
-	local function mk(text, x, risky, fn)
-		local b = Create("TextButton", { Size = UDim2.new(0.5, -24, 0, 30), Position = UDim2.new(x, x == 0 and 18 or 6, 1, -44), Text = "", AutoButtonColor = false, ZIndex = 902, Parent = box })
-		self:AddToRegistry(b, { BackgroundColor3 = "Element" })
-		Corner(b, 8)
-		local bs = Create("UIStroke", { Thickness = 1, Parent = b })
-		self:AddToRegistry(bs, { Color = risky and "Risky" or "Outline" })
-		local l = Text(b, text, 12, true, risky and "Risky" or "Font")
+	local function mk(text, xScale, accent, fn)
+		local b = Create("TextButton", { Size = UDim2.new(0.5, -1, 0, 36), Position = UDim2.new(xScale, xScale == 0 and 0 or 1, 1, -36), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 902, Parent = box })
+		local l = Text(b, text, 12, true, accent and "Accent" or "FontDim")
 		l.TextXAlignment = Enum.TextXAlignment.Center; l.Size = UDim2.new(1, 0, 1, 0); l.ZIndex = 903
-		Hover(b, "Element", "ElementHover"); Ripple(b); Press(b)
+		b.MouseEnter:Connect(function() Tween(l, { TextColor3 = accent and Library.Theme.Accent or Library.Theme.Font }, 0.1) end)
+		b.MouseLeave:Connect(function() Tween(l, { TextColor3 = accent and Library.Theme.Accent or Library.Theme.FontDim }, 0.1) end)
 		b.MouseButton1Click:Connect(function() close() task.defer(function() if fn then pcall(fn) end end) end)
 		return b
 	end
-	mk("no", 0, false, onNo)
-	mk("yes", 0.5, true, onYes)
-	veil.InputBegan:Connect(function(inp)
-		if IsPressed(inp) then
-			local a, s = box.AbsolutePosition, box.AbsoluteSize
-			local p = inp.Position
-			if not (p.X >= a.X and p.X <= a.X + s.X and p.Y >= a.Y and p.Y <= a.Y + s.Y) then close() end
-		end
-	end)
+	mk("cancel", 0, false, onNo)
+	mk("unload", 0.5, true, onYes)
+	local mid = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(1, 36), Position = UDim2.new(0.5, 0, 1, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 903, Parent = box })
+	self:AddToRegistry(mid, { BackgroundColor3 = "Outline" })
+	veil.MouseButton1Click:Connect(close)
+	box.Active = true
 	return veil
 end
 
@@ -489,8 +485,7 @@ function Library:CreateWindow(cfg)
 	Corner(rail, 16)
 	local railPatch = Create("Frame", { Size = UDim2.new(0, 16, 1, 0), Position = UDim2.new(1, -16, 0, 0), BorderSizePixel = 0, ZIndex = 11, Parent = rail })
 	self:AddToRegistry(railPatch, { BackgroundColor3 = "Main" })
-	local railEdge = Create("Frame", { Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(1, -1, 0, 0), BackgroundTransparency = 0.25, BorderSizePixel = 0, ZIndex = 12, Parent = rail })
-	self:AddToRegistry(railEdge, { BackgroundColor3 = "Outline" })
+
 	local logo = Create("ImageLabel", { Size = UDim2.fromOffset(26, 26), Position = UDim2.new(0.5, -13, 0, 20), BackgroundTransparency = 1, Image = cfg.Icon and ("rbxassetid://" .. tostring(cfg.Icon)) or Library.Icon, ZIndex = 13, Parent = rail })
 	local railList = Create("Frame", { Size = UDim2.new(1, 0, 1, -140), Position = UDim2.new(0, 0, 0, 68), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
 	Create("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = railList })
@@ -550,23 +545,27 @@ function Library:CreateWindow(cfg)
 	end
 	closeBtn.MouseButton1Click:Connect(function() Library:Confirm("unload " .. (cfg.Title or "the menu") .. "?", "this closes the menu for this session. you'll need to run the script again.", function() Library:Unload() end) end)
 
-	local searchBox = Create("Frame", { Size = UDim2.new(0, 210, 0, 32), Position = UDim2.new(1, -252, 0, 22), ZIndex = 13, Parent = head })
-	self:AddToRegistry(searchBox, { BackgroundColor3 = "Main" }); Corner(searchBox, 10); Stroke(searchBox, "Outline")
+	local searchBox = Create("Frame", { Size = UDim2.new(0, 210, 0, 30), Position = UDim2.new(1, -252, 0, 23), BackgroundTransparency = 1, ZIndex = 13, Parent = head })
+	Corner(searchBox, 8)
+	local searchEdge = Stroke(searchBox, "Outline")
 	local sIcon = SearchIcon(searchBox, 13, "FontDim"); sIcon.Position = UDim2.new(0, 11, 0.5, -7); sIcon.ZIndex = 14
 	local searchIn = Create("TextBox", { Size = UDim2.new(1, -34, 1, 0), Position = UDim2.new(0, 26, 0, 0), BackgroundTransparency = 1, Text = "", PlaceholderText = "search settings", TextSize = 12, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 14, Parent = searchBox })
 	self:AddToRegistry(searchIn, { TextColor3 = "Font", PlaceholderColor3 = "FontDim" })
-	local results = Create("Frame", { Size = UDim2.new(0, 260, 0, 0), Position = UDim2.new(1, -282, 0, 58), Visible = false, ZIndex = 40, Parent = head })
-	self:AddToRegistry(results, { BackgroundColor3 = "Main" }); Corner(results, 12); Stroke(results, "Outline"); Shadow(results, 10)
+	local results = Create("Frame", { Size = UDim2.new(0, 240, 0, 0), Visible = false, ZIndex = 200, Parent = PopupLayer })
+	self:AddToRegistry(results, { BackgroundColor3 = "Main" }); Corner(results, 10); Stroke(results, "Outline"); Shadow(results, 10)
 	local resultsBody = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 41, Parent = results })
 	Pad(resultsBody, 6, 6, 6, 6)
 	Create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = resultsBody })
 	local function runSearch(q)
 		for _, c in ipairs(resultsBody:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
-		q = string.lower(q or "")
+		q = string.lower(tostring(q or ""))
 		if q == "" then results.Visible = false return end
+		results.Position = UDim2.fromOffset(searchBox.AbsolutePosition.X - 30, searchBox.AbsolutePosition.Y + searchBox.AbsoluteSize.Y + 6)
+		RaisePopup(results)
 		local n = 0
 		for _, e in ipairs(Library.SearchIndex) do
-			if string.find(string.lower(e.name), q, 1, true) or string.find(string.lower(e.path), q, 1, true) then
+			local nm2, pt2 = string.lower(tostring(e.name or "")), string.lower(tostring(e.path or ""))
+			if string.find(nm2, q, 1, true) or string.find(pt2, q, 1, true) then
 				n = n + 1
 				if n > 7 then break end
 				local b = Create("TextButton", { Size = UDim2.new(1, 0, 0, 34), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, LayoutOrder = n, ZIndex = 41, Parent = resultsBody })
@@ -578,11 +577,16 @@ function Library:CreateWindow(cfg)
 				b.MouseButton1Click:Connect(function() pcall(e.focus) searchIn.Text = "" results.Visible = false end)
 			end
 		end
-		results.Size = UDim2.new(0, 260, 0, n > 0 and (n * 37 + 9) or 0)
+		results.Size = UDim2.new(0, 240, 0, n > 0 and (n * 37 + 9) or 0)
 		results.Visible = n > 0
 	end
 	searchIn:GetPropertyChangedSignal("Text"):Connect(function() runSearch(searchIn.Text) end)
-	searchIn.FocusLost:Connect(function() task.delay(0.2, function() if searchIn.Text == "" then results.Visible = false end end) end)
+	searchIn.Focused:Connect(function() searchEdge.Color = Library.Theme.Accent Library.Registry[searchEdge] = { Color = "Accent" } end)
+	searchIn.FocusLost:Connect(function()
+		searchEdge.Color = Library.Theme.Outline
+		Library.Registry[searchEdge] = { Color = "Outline" }
+		task.delay(0.25, function() if searchIn.Text == "" then results.Visible = false end end)
+	end)
 
 	local body = Create("Frame", { Size = UDim2.new(1, -68, 1, -104), Position = UDim2.new(0, 68, 0, 72), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
 	local fade = Create("Frame", { Size = UDim2.new(1, 0, 0, 26), Position = UDim2.new(0, 0, 1, -26), BorderSizePixel = 0, ZIndex = 20, Parent = body })
@@ -667,16 +671,16 @@ function Library:CreateWindow(cfg)
 		local btn = Create("TextButton", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(44, 44), Position = UDim2.new(0.5, 0, 0.5, 0), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 13, Parent = slot })
 		Corner(btn, 14); Library:AddToRegistry(btn, { BackgroundColor3 = "Element" })
 		local glyph
-		if icon then
+		if icon and cfg.UseIcons ~= false then
 			glyph = Create("ImageLabel", { Size = UDim2.fromOffset(20, 20), Position = UDim2.new(0.5, -10, 0.5, -10), BackgroundTransparency = 1, Image = (type(icon) == "number") and ("rbxassetid://" .. icon) or tostring(icon), ZIndex = 14, Parent = btn })
 			Library:AddToRegistry(glyph, { ImageColor3 = "FontDim" })
 		else
-			glyph = Text(btn, string.upper(string.sub(name, 1, 2)), 12, true, "FontDim")
+			glyph = Text(btn, string.lower(string.sub(name, 1, 3)), 11, true, "FontDim")
 			glyph.TextXAlignment = Enum.TextXAlignment.Center; glyph.Size = UDim2.new(1, 0, 1, 0); glyph.ZIndex = 14
 		end
 
 		local tip = Create("Frame", { Size = UDim2.new(0, 0, 0, 22), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(1, 8, 0.5, -11), Visible = false, ZIndex = 45, Parent = btn })
-		Library:AddToRegistry(tip, { BackgroundColor3 = "Element" }); Corner(tip, 7); Pad(tip, 8, 8, 0, 0)
+		Library:AddToRegistry(tip, { BackgroundColor3 = "Main" }); Corner(tip, 6); Pad(tip, 8, 8, 0, 0); Stroke(tip, "Outline")
 		local tipT = Text(tip, name, 11, true); tipT.AutomaticSize = Enum.AutomaticSize.X; tipT.Size = UDim2.new(0, 0, 1, 0); tipT.ZIndex = 46
 		btn.MouseEnter:Connect(function() tip.Visible = true if window.ActiveTab ~= tab then Tween(btn, { BackgroundTransparency = 0 }, 0.1) end end)
 		btn.MouseLeave:Connect(function() tip.Visible = false if window.ActiveTab ~= tab then Tween(btn, { BackgroundTransparency = 1 }, 0.1) end end)
