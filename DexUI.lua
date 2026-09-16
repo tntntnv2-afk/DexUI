@@ -38,7 +38,7 @@ local Library = {
 	ESPFont = Font.fromEnum(Enum.Font.Code),
 	ToggleKeybind = Enum.KeyCode.RightControl,
 	Icon = "rbxassetid://83607561451748",
-	Effects = { Blur = true, Snow = true, BlurSize = 12, SnowCount = 45 },
+	Effects = { Blur = false, Snow = true, BlurSize = 12, SnowCount = 45 },
 }
 
 getgenv().Toggles = Library.Toggles
