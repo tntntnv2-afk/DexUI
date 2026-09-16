@@ -22,7 +22,7 @@ local Library = {
 	IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled,
 	Theme = {
 		Background = Color3.fromRGB(9, 9, 10),
-		Main = Color3.fromRGB(15, 15, 17),
+		Main = Color3.fromRGB(0, 0, 0),
 		Element = Color3.fromRGB(19, 19, 22),
 		ElementHover = Color3.fromRGB(27, 27, 31),
 		Accent = Color3.fromRGB(214, 40, 48),
@@ -1758,7 +1758,7 @@ ThemeManager.Folder = "DexoriUI"
 ThemeManager.Library = nil
 ThemeManager.BuiltIn = {
 	["Frostbite"] = { Background = "070a10", Main = "0b0f17", Element = "111722", ElementHover = "18202e", Accent = "60b2ff", AccentGradient = { "96d6ff", "2260be", 0 }, Outline = "1c2636", OutlineStrong = "2e568c", Font = "e2ebf5", FontDim = "7889a0", Risky = "ff6060" },
-	["Dexori Red"] = { Background = "09090a", Main = "0f0f11", Element = "131316", ElementHover = "1b1b1f", Accent = "d62830", AccentGradient = { "f33e46", "800e14", 0 }, Outline = "202024", OutlineStrong = "3a1418", Font = "e6e6e8", FontDim = "808088", Risky = "ff5050" },
+	["Dexori Red"] = { Background = "09090a", Main = "000000", Element = "131316", ElementHover = "1b1b1f", Accent = "d62830", AccentGradient = { "f33e46", "800e14", 0 }, Outline = "202024", OutlineStrong = "3a1418", Font = "e6e6e8", FontDim = "808088", Risky = "ff5050" },
 	["Nightshade"] = { Background = "0b0810", Main = "100c18", Element = "171124", ElementHover = "1f1830", Accent = "9b59ff", AccentGradient = { "c08cff", "5e2bd6", 0 }, Outline = "231a33", OutlineStrong = "42288c", Font = "ece6f8", FontDim = "8b7fa8", Risky = "ff6b6b" },
 	["Pine"] = { Background = "07100c", Main = "0b1712", Element = "10201a", ElementHover = "172c24", Accent = "34d399", AccentGradient = { "6ee7b7", "0f9268", 0 }, Outline = "173028", OutlineStrong = "1d6b4c", Font = "e4f3ec", FontDim = "76998a", Risky = "ff6b6b" },
 	["Carbon"] = { Background = "09090a", Main = "0e0e10", Element = "141416", ElementHover = "1c1c20", Accent = "d8d8dc", AccentGradient = { "ffffff", "8c8c94", 0 }, Outline = "1f1f23", OutlineStrong = "3a3a42", Font = "f2f2f4", FontDim = "83838c", Risky = "ff5050" },
