@@ -38,7 +38,7 @@ local Library = {
 	ESPFont = Font.fromEnum(Enum.Font.Code),
 	ToggleKeybind = Enum.KeyCode.RightControl,
 	Icon = "rbxassetid://83607561451748",
-	Effects = { Blur = false, Snow = true, BlurSize = 12, SnowCount = 45 },
+	Effects = { Blur = false, Dim = false, Snow = true, BlurSize = 12, DimAmount = 0.32, SnowCount = 45 },
 }
 
 getgenv().Toggles = Library.Toggles
@@ -340,12 +340,16 @@ local function stopSnow()
 end
 function Library:_SetBackdrop(on)
 	if on then
-		Backdrop.Visible = true
-		Tween(Backdrop, { BackgroundTransparency = 0.32 }, 0.25)
+		local dim = self.Effects.Dim and (self.Effects.DimAmount or 0.32) or 1
+		Backdrop.Visible = (self.Effects.Dim or self.Effects.Snow) and true or false
+		BackdropGlow.Visible = self.Effects.Dim and true or false
+		Tween(Backdrop, { BackgroundTransparency = dim }, 0.25)
 		if self.Effects.Blur then Blur.Enabled = true Tween(Blur, { Size = self.Effects.BlurSize }, 0.25) end
 		if self.Effects.Snow then startSnow() end
 	else
-		Tween(Backdrop, { BackgroundTransparency = 1 }, 0.2).Completed:Connect(function() if Backdrop.BackgroundTransparency >= 0.99 then Backdrop.Visible = false end end)
+		Tween(Backdrop, { BackgroundTransparency = 1 }, 0.2).Completed:Connect(function()
+			if Backdrop.BackgroundTransparency >= 0.99 then Backdrop.Visible = false end
+		end)
 		Tween(Blur, { Size = 0 }, 0.2).Completed:Connect(function() if Blur.Size == 0 then Blur.Enabled = false end end)
 		stopSnow()
 	end
