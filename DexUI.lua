@@ -176,16 +176,24 @@ local function Glass(frame)
 end
 local function Shadow(frame, spread)
 	spread = spread or 16
-	local holder = frame:FindFirstChild("_shadowHolder")
-	if not holder then
-		holder = Create("Frame", { Name = "_shadowHolder", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = math.max((frame.ZIndex or 1) - 1, 0), Parent = frame })
-		holder.LayoutOrder = -9999
+	local host = frame.Parent
+	if not host then return end
+	local holder = Create("Frame", { Name = "_shadow", BackgroundTransparency = 1, ZIndex = math.max((frame.ZIndex or 1) - 1, 0), Parent = host })
+	holder.LayoutOrder = -9999
+	local function sync()
+		holder.Size = UDim2.fromOffset(frame.AbsoluteSize.X, frame.AbsoluteSize.Y)
+		holder.Position = UDim2.fromOffset(frame.AbsolutePosition.X - host.AbsolutePosition.X, frame.AbsolutePosition.Y - host.AbsolutePosition.Y)
+		holder.Visible = frame.Visible
 	end
 	for i = 1, 3 do
 		local pad = math.floor(spread * i / 3)
-		local sh = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(1, pad * 2, 1, pad * 2), Position = UDim2.new(0.5, 0, 0.5, math.floor(pad * 0.3)), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.84 + (i - 1) * 0.05, BorderSizePixel = 0, ZIndex = holder.ZIndex, Parent = holder })
-		Create("UICorner", { CornerRadius = UDim.new(0, 12 + pad), Parent = sh })
+		local sh = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(1, pad * 2, 1, pad * 2), Position = UDim2.new(0.5, 0, 0.5, math.floor(pad * 0.25)), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.86 + (i - 1) * 0.04, BorderSizePixel = 0, ZIndex = holder.ZIndex, Parent = holder })
+		Create("UICorner", { CornerRadius = UDim.new(0, 14 + pad), Parent = sh })
 	end
+	frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(sync)
+	frame:GetPropertyChangedSignal("AbsolutePosition"):Connect(sync)
+	frame:GetPropertyChangedSignal("Visible"):Connect(sync)
+	task.defer(sync)
 	return holder
 end
 local PopupLayer = Create("Frame", { Name = "Popups", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 500, Parent = ScreenGui })
@@ -279,36 +287,40 @@ function Library:SetNotifySide(side)
 end
 function Library:Notify(opts, duration)
 	if type(opts) ~= "table" then opts = { Description = tostring(opts), Time = duration } end
-	local title = opts.Title or "dexori"
+	local title = opts.Title
 	local desc = opts.Description or ""
 	local time = opts.Time or 4
-	local W = 260
-	local card = Create("Frame", { Size = UDim2.fromOffset(W, 44), BackgroundTransparency = 0.04, ClipsDescendants = true, Parent = NotifHolder })
+	local W = 236
+	local card = Create("Frame", { Size = UDim2.fromOffset(W, 34), BackgroundTransparency = 0.05, ClipsDescendants = true, Parent = NotifHolder })
 	self:AddToRegistry(card, { BackgroundColor3 = "Main" })
-	Corner(card, 10); Stroke(card, "Outline"); Shadow(card, 12)
-	local bar = Create("Frame", { Size = UDim2.new(0, 2, 1, -12), Position = UDim2.new(0, 8, 0, 6), BorderSizePixel = 0, ZIndex = 2, Parent = card })
-	Corner(bar, 1)
-	Create("UIGradient", { Rotation = 90, Parent = bar })
-	self:AddToRegistry(bar.UIGradient, { Color = "AccentGradient" })
-	local t = Text(card, title, 12, true); t.Position = UDim2.new(0, 18, 0, 7); t.Size = UDim2.new(1, -28, 0, 14); t.ZIndex = 2
-	local d = Text(card, desc, 11, false, "FontDim")
-	d.Position = UDim2.new(0, 18, 0, 22); d.Size = UDim2.new(1, -28, 0, 28); d.TextWrapped = true
-	d.TextYAlignment = Enum.TextYAlignment.Top; d.TextTruncate = Enum.TextTruncate.AtEnd; d.ZIndex = 2
+	Corner(card, 8); Stroke(card, "Outline")
+	local dot = Create("Frame", { Size = UDim2.fromOffset(5, 5), Position = UDim2.new(0, 12, 0, 15), BorderSizePixel = 0, ZIndex = 2, Parent = card })
+	Corner(dot, 3); self:AddToRegistry(dot, { BackgroundColor3 = "Accent" })
+	local body = Text(card, title and (title .. "  ") or "", 12, true)
+	body.Position = UDim2.new(0, 26, 0, 0); body.Size = UDim2.new(1, -38, 1, 0); body.ZIndex = 2
+	if title and desc ~= "" then
+		body.RichText = true
+		body.Text = string.format('%s <font color="rgb(122,122,132)">%s</font>', title, desc)
+	elseif not title then
+		body.Text = desc
+	end
 	task.defer(function()
-		local lines = math.clamp(math.ceil(d.TextBounds.Y / 13), 1, 3)
-		local h = 26 + lines * 13
-		card.Size = UDim2.fromOffset(W, h)
-		d.Size = UDim2.new(1, -28, 0, lines * 13)
+		local lines = math.clamp(math.ceil(body.TextBounds.X / (W - 44)), 1, 2)
+		if lines > 1 then
+			body.TextWrapped = true
+			card.Size = UDim2.fromOffset(W, 48)
+			body.Position = UDim2.new(0, 26, 0, 6)
+			body.Size = UDim2.new(1, -38, 0, 36)
+			body.TextYAlignment = Enum.TextYAlignment.Top
+			dot.Position = UDim2.new(0, 12, 0, 12)
+		end
 	end)
-	local prog = Create("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), BorderSizePixel = 0, ZIndex = 3, Parent = card })
-	self:AddToRegistry(prog, { BackgroundColor3 = "Accent" })
 	card.Position = UDim2.new(1, W + 20, 0, 0)
-	Tween(card, { Position = UDim2.new(0, 0, 0, 0) }, 0.24, Enum.EasingStyle.Quint)
-	Tween(prog, { Size = UDim2.new(0, 0, 0, 1) }, time, Enum.EasingStyle.Linear)
+	Tween(card, { Position = UDim2.new(0, 0, 0, 0) }, 0.22, Enum.EasingStyle.Quint)
 	local obj = { Frame = card }
 	function obj:Destroy()
 		if not card.Parent then return end
-		Tween(card, { Position = UDim2.new(1, W + 20, 0, 0) }, 0.18).Completed:Connect(function() card:Destroy() end)
+		Tween(card, { Position = UDim2.new(1, W + 20, 0, 0) }, 0.16).Completed:Connect(function() card:Destroy() end)
 	end
 	task.delay(time, function() obj:Destroy() end)
 	card.InputBegan:Connect(function(inp) if IsPressed(inp) then obj:Destroy() end end)
@@ -410,19 +422,7 @@ function Library:CreateWindow(cfg)
 	self:AddToRegistry(railPatch, { BackgroundColor3 = "Main" })
 	local railEdge = Create("Frame", { Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(1, -1, 0, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 12, Parent = rail })
 	self:AddToRegistry(railEdge, { BackgroundColor3 = "Outline" })
-	local logoRing = Create("Frame", { Size = UDim2.fromOffset(42, 42), Position = UDim2.new(0.5, -21, 0, 14), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
-	Corner(logoRing, 14)
-	local ringStroke = Create("UIStroke", { Thickness = 1, Transparency = 0.55, Parent = logoRing })
-	self:AddToRegistry(ringStroke, { Color = "Accent" })
-	local logo = Create("ImageLabel", { Size = UDim2.fromOffset(26, 26), Position = UDim2.new(0.5, -13, 0, 22), BackgroundTransparency = 1, Image = cfg.Icon and ("rbxassetid://" .. tostring(cfg.Icon)) or Library.Icon, ZIndex = 13, Parent = rail })
-	task.spawn(function()
-		while not Library.Unloaded and ringStroke.Parent do
-			Tween(ringStroke, { Transparency = 0.85 }, 1.5, Enum.EasingStyle.Sine)
-			task.wait(1.5)
-			Tween(ringStroke, { Transparency = 0.45 }, 1.5, Enum.EasingStyle.Sine)
-			task.wait(1.5)
-		end
-	end)
+	local logo = Create("ImageLabel", { Size = UDim2.fromOffset(26, 26), Position = UDim2.new(0.5, -13, 0, 20), BackgroundTransparency = 1, Image = cfg.Icon and ("rbxassetid://" .. tostring(cfg.Icon)) or Library.Icon, ZIndex = 13, Parent = rail })
 	local railList = Create("Frame", { Size = UDim2.new(1, 0, 1, -140), Position = UDim2.new(0, 0, 0, 68), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
 	Create("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = railList })
 
@@ -455,9 +455,8 @@ function Library:CreateWindow(cfg)
 
 	local head = Create("Frame", { Size = UDim2.new(1, -68, 0, 72), Position = UDim2.new(0, 68, 0, 0), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
 	local pageTitle = Text(head, "", 21, true); pageTitle.Position = UDim2.new(0, 24, 0, 13); pageTitle.Size = UDim2.new(0.5, 0, 0, 26); pageTitle.ZIndex = 13
-	local titleBar = Create("Frame", { Size = UDim2.fromOffset(24, 3), Position = UDim2.new(0, 24, 0, 41), ZIndex = 13, Parent = head })
-	Corner(titleBar, 2); Create("UIGradient", { Parent = titleBar })
-	self:AddToRegistry(titleBar.UIGradient, { Color = "AccentGradient" })
+	local titleBar = Create("Frame", { Size = UDim2.fromOffset(18, 2), Position = UDim2.new(0, 24, 0, 40), ZIndex = 13, Parent = head })
+	Corner(titleBar, 1); self:AddToRegistry(titleBar, { BackgroundColor3 = "Accent" })
 	local pageSub = Text(head, cfg.Subtitle or "", 11, false, "FontDim"); pageSub.Position = UDim2.new(0, 24, 0, 48); pageSub.Size = UDim2.new(0.5, 0, 0, 14); pageSub.ZIndex = 13
 	Draggable(head, main)
 
@@ -617,7 +616,7 @@ function Library:CreateWindow(cfg)
 			Tween(self._btn, { BackgroundTransparency = 0 }, 0.12)
 			if self._glyph:IsA("ImageLabel") then Tween(self._glyph, { ImageColor3 = Library.Theme.Accent }, 0.12) else Tween(self._glyph, { TextColor3 = Library.Theme.Accent }, 0.12) end
 			pageTitle.Text = name
-			task.defer(function() Tween(titleBar, { Size = UDim2.fromOffset(math.clamp(pageTitle.TextBounds.X, 20, 140), 3) }, 0.28, Enum.EasingStyle.Quint) end)
+			task.defer(function() Tween(titleBar, { Size = UDim2.fromOffset(math.clamp(pageTitle.TextBounds.X, 18, 140), 2) }, 0.22, Enum.EasingStyle.Quint) end)
 			window.ActiveTab = self
 			local y = self._btn.AbsolutePosition.Y - rail.AbsolutePosition.Y + self._btn.AbsoluteSize.Y * 0.5
 			Tween(pill, { Position = UDim2.new(0, 0, 0, y) }, 0.22, Enum.EasingStyle.Back)
@@ -856,7 +855,7 @@ function GroupboxMethods:AddSlider(idx, cfg)
 	local track = Create("Frame", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, 8), Position = UDim2.new(0, 0, 1, 0), ZIndex = 5, Parent = f })
 	Library:AddToRegistry(track, { BackgroundColor3 = "Element" }); Corner(track, 4); Stroke(track, "Outline")
 	local fill = Create("Frame", { Size = UDim2.new(0, 0, 1, 0), BorderSizePixel = 0, ZIndex = 6, Parent = track }); Corner(fill, 4)
-	Create("UIGradient", { Parent = fill }); Library:AddToRegistry(fill.UIGradient, { Color = "AccentGradient" })
+	Library:AddToRegistry(fill, { BackgroundColor3 = "Accent" })
 	local knob = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(10, 10), Position = UDim2.new(0, 0, 0.5, 0), BorderSizePixel = 0, ZIndex = 8, Parent = track })
 	Library:AddToRegistry(knob, { BackgroundColor3 = "Font" }); Corner(knob, 5)
 	local hit = Create("TextButton", { Size = UDim2.new(1, 0, 1, 14), Position = UDim2.new(0, 0, 0, -7), BackgroundTransparency = 1, Text = "", ZIndex = 9, Parent = track })
@@ -1534,21 +1533,19 @@ function GroupboxMethods:AddESPPreview(cfg)
 		tb.MouseButton1Click:Connect(function() tab:Select() end)
 		table.insert(preview.Tabs, tab)
 	end
-	function preview:SetChams(on, colour, transparency)
-		for _, d in ipairs(dummy:GetDescendants()) do
-			if d:IsA("BasePart") then
-				if on then
-					d.Color = colour or Color3.fromRGB(214, 40, 48)
-					d.Material = Enum.Material.Neon
-					d.Transparency = transparency or 0
-				else
-					d.Material = Enum.Material.SmoothPlastic
-					d.Transparency = 0
-				end
-			elseif d:IsA("Decal") or d:IsA("Texture") then
-				d.Transparency = on and 1 or 0
-			end
+	local chamsHL = nil
+	function preview:SetChams(on, fillColour, outlineColour, fillTransparency)
+		if not on then
+			if chamsHL then chamsHL:Destroy() chamsHL = nil end
+			return
 		end
+		if not chamsHL then
+			chamsHL = Create("Highlight", { Name = "_chams", DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Adornee = dummy, Parent = dummy })
+		end
+		chamsHL.FillColor = fillColour or Color3.fromRGB(214, 40, 48)
+		chamsHL.OutlineColor = outlineColour or Color3.fromRGB(255, 255, 255)
+		chamsHL.FillTransparency = fillTransparency or 0.35
+		chamsHL.OutlineTransparency = 0
 	end
 	function preview:GetTab(name) for _, t in ipairs(self.Tabs) do if t.Name == name then return t end end end
 	function preview:Set(name, settings) local t = self:GetTab(name) if t then t:Set(settings) end end
