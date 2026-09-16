@@ -1859,7 +1859,7 @@ function ThemeManager:ApplyToTab(tab)
 	self:BuildFolderTree()
 	local gb = tab:AddLeftGroupbox("Theme")
 	self._pickers = {}
-	local keys = { { "Background", "Background" }, { "Main", "Panels" }, { "Element", "Elements" }, { "ElementHover", "Element hover" }, { "Accent", "Accent" }, { "Outline", "Outline" }, { "OutlineStrong", "Strong outline" }, { "Font", "Text" }, { "FontDim", "Dim text" } }
+	local keys = { { "Background", "Background" }, { "Main", "Panels" }, { "Element", "Elements" }, { "ElementHover", "Element hover" }, { "Accent", "Accent" }, { "Outline", "Outline" }, { "OutlineStrong", "Strong outline" }, { "Font", "Text" }, { "FontDim", "Dim text" }, { "Risky", "Risky / danger" } }
 	for _, pair in ipairs(keys) do
 		local key, label = pair[1], pair[2]
 		local p = gb:AddColorPicker("Theme_" .. key, { Text = label, Default = Library.Theme[key], Callback = function(c) Library.Theme[key] = c Library:UpdateColorsUsingRegistry() end })
@@ -1885,6 +1885,23 @@ function ThemeManager:ApplyToTab(tab)
 		:AddButton({ Text = "Delete", Risky = true, DoubleClick = true, Func = function() if list.Value and self:DeleteTheme(list.Value) then list:SetValues(self:ListThemes()) end end })
 	gb2:AddButton({ Text = "Reset to Frostbite", Func = function() self:ApplyTheme("Frostbite") end })
 	gb2:AddButton({ Text = "Refresh list", Func = function() list:SetValues(self:ListThemes()) end })
+	gb2:AddButton({ Text = "Print theme to console", Func = function()
+		local T = self.Library.Theme
+		local order = { "Background", "Main", "Element", "ElementHover", "Accent", "Outline", "OutlineStrong", "Font", "FontDim", "Risky" }
+		local out = { "Theme = {" }
+		for _, k in ipairs(order) do
+			local c = T[k]
+			out[#out + 1] = string.format("\t%s = Color3.fromRGB(%d, %d, %d),", k, math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5))
+		end
+		local g = T.AccentGradient.Keypoints
+		local a, b = g[1].Value, g[#g].Value
+		out[#out + 1] = string.format("\tAccentGradient = ColorSequence.new(Color3.fromRGB(%d, %d, %d), Color3.fromRGB(%d, %d, %d)),",
+			math.floor(a.R * 255 + 0.5), math.floor(a.G * 255 + 0.5), math.floor(a.B * 255 + 0.5),
+			math.floor(b.R * 255 + 0.5), math.floor(b.G * 255 + 0.5), math.floor(b.B * 255 + 0.5))
+		out[#out + 1] = "}"
+		print(table.concat(out, "\n"))
+		self.Library:Notify({ Title = "Theme", Description = "printed to console - copy it from there", Time = 4 })
+	end })
 	self:LoadDefault()
 end
 
