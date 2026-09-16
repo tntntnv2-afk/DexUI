@@ -21,10 +21,10 @@ local Library = {
 	Unloaded = false,
 	IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled,
 	Theme = {
-		Background = Color3.fromRGB(8, 8, 9),
-		Main = Color3.fromRGB(14, 14, 16),
-		Element = Color3.fromRGB(24, 24, 27),
-		ElementHover = Color3.fromRGB(34, 34, 38),
+		Background = Color3.fromRGB(9, 9, 10),
+		Main = Color3.fromRGB(15, 15, 17),
+		Element = Color3.fromRGB(23, 23, 26),
+		ElementHover = Color3.fromRGB(32, 32, 36),
 		Accent = Color3.fromRGB(214, 40, 48),
 		AccentGradient = ColorSequence.new(Color3.fromRGB(243, 62, 70), Color3.fromRGB(128, 14, 20)),
 		Outline = Color3.fromRGB(32, 32, 36),
@@ -33,8 +33,8 @@ local Library = {
 		FontDim = Color3.fromRGB(122, 122, 132),
 		Risky = Color3.fromRGB(255, 92, 92),
 	},
-	FontFace = Font.new("rbxasset://fonts/families/Montserrat.json", Enum.FontWeight.Medium),
-	FontFaceBold = Font.new("rbxasset://fonts/families/Montserrat.json", Enum.FontWeight.Bold),
+	FontFace = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Medium),
+	FontFaceBold = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.SemiBold),
 	ESPFont = Font.fromEnum(Enum.Font.Code),
 	ToggleKeybind = Enum.KeyCode.RightControl,
 	Icon = "rbxassetid://83607561451748",
@@ -187,12 +187,16 @@ local function Shadow(frame, spread)
 	end
 	for i = 1, 3 do
 		local pad = math.floor(spread * i / 3)
-		local sh = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(1, pad * 2, 1, pad * 2), Position = UDim2.new(0.5, 0, 0.5, math.floor(pad * 0.25)), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.86 + (i - 1) * 0.04, BorderSizePixel = 0, ZIndex = holder.ZIndex, Parent = holder })
+		local sh = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(1, pad * 2, 1, pad * 2), Position = UDim2.new(0.5, 0, 0.5, math.floor(pad * 0.25)), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.9 + (i - 1) * 0.03, BorderSizePixel = 0, ZIndex = holder.ZIndex, Parent = holder })
 		Create("UICorner", { CornerRadius = UDim.new(0, 14 + pad), Parent = sh })
 	end
 	frame:GetPropertyChangedSignal("AbsoluteSize"):Connect(sync)
 	frame:GetPropertyChangedSignal("AbsolutePosition"):Connect(sync)
 	frame:GetPropertyChangedSignal("Visible"):Connect(sync)
+	frame.AncestryChanged:Connect(function(_, parent)
+		if not parent then holder:Destroy() end
+	end)
+	frame.Destroying:Connect(function() holder:Destroy() end)
 	task.defer(sync)
 	return holder
 end
@@ -412,7 +416,24 @@ function Library:CreateWindow(cfg)
 	Create("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(226, 226, 232)), Parent = main })
 	local edge = Create("UIStroke", { Thickness = 1, Transparency = 0.5, Color = Color3.fromRGB(255, 255, 255), Parent = main })
 	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(1, 0.92) }), Parent = edge })
-	Shadow(main, 34)
+	do
+		local flow = Create("UIStroke", { Thickness = 1.5, Transparency = 0.15, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = main })
+		self:AddToRegistry(flow, { Color = "Accent" })
+		local g = Create("UIGradient", {
+			Transparency = NumberSequence.new({
+				NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.35, 1),
+				NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(0.65, 1),
+				NumberSequenceKeypoint.new(1, 1),
+			}),
+			Parent = flow,
+		})
+		task.spawn(function()
+			while not Library.Unloaded and g.Parent do
+				g.Rotation = (g.Rotation + 1.6) % 360
+				task.wait(0.03)
+			end
+		end)
+	end
 	window.Frame = main
 
 	local rail = Create("Frame", { Name = "Rail", Size = UDim2.new(0, 68, 1, 0), BorderSizePixel = 0, ZIndex = 11, Parent = main })
@@ -466,7 +487,7 @@ function Library:CreateWindow(cfg)
 	local searchIn = Create("TextBox", { Size = UDim2.new(1, -34, 1, 0), Position = UDim2.new(0, 26, 0, 0), BackgroundTransparency = 1, Text = "", PlaceholderText = "search settings", TextSize = 12, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 14, Parent = searchBox })
 	self:AddToRegistry(searchIn, { TextColor3 = "Font", PlaceholderColor3 = "FontDim" })
 	local results = Create("Frame", { Size = UDim2.new(0, 260, 0, 0), Position = UDim2.new(1, -282, 0, 58), Visible = false, ZIndex = 40, Parent = head })
-	self:AddToRegistry(results, { BackgroundColor3 = "Main" }); Corner(results, 12); Stroke(results, "Outline"); Shadow(results, 14)
+	self:AddToRegistry(results, { BackgroundColor3 = "Main" }); Corner(results, 12); Stroke(results, "Outline"); Shadow(results, 10)
 	local resultsBody = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 41, Parent = results })
 	Pad(resultsBody, 6, 6, 6, 6)
 	Create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = resultsBody })
@@ -495,6 +516,9 @@ function Library:CreateWindow(cfg)
 	searchIn.FocusLost:Connect(function() task.delay(0.2, function() if searchIn.Text == "" then results.Visible = false end end) end)
 
 	local body = Create("Frame", { Size = UDim2.new(1, -68, 1, -104), Position = UDim2.new(0, 68, 0, 72), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
+	local fade = Create("Frame", { Size = UDim2.new(1, 0, 0, 26), Position = UDim2.new(0, 0, 1, -26), BorderSizePixel = 0, ZIndex = 20, Parent = body })
+	self:AddToRegistry(fade, { BackgroundColor3 = "Background" })
+	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.15) }), Parent = fade })
 	local footer = Create("Frame", { Size = UDim2.new(1, -68, 0, 32), Position = UDim2.new(0, 68, 1, -32), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
 	local footLine = Create("Frame", { Size = UDim2.new(1, -44, 0, 1), Position = UDim2.new(0, 22, 0, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 12, Parent = footer })
 	self:AddToRegistry(footLine, { BackgroundColor3 = "Outline" })
@@ -548,7 +572,7 @@ function Library:CreateWindow(cfg)
 	end))
 	if Library.IsMobile then
 		local mob = Create("TextButton", { Size = UDim2.fromOffset(46, 46), Position = UDim2.new(0, 14, 0.5, -23), Text = "", AutoButtonColor = false, ZIndex = 40, Parent = ScreenGui })
-		self:AddToRegistry(mob, { BackgroundColor3 = "Main" }); Corner(mob, 14); Stroke(mob, "Outline"); Shadow(mob, 18)
+		self:AddToRegistry(mob, { BackgroundColor3 = "Main" }); Corner(mob, 14); Stroke(mob, "Outline")
 		Create("ImageLabel", { Size = UDim2.fromOffset(26, 26), Position = UDim2.new(0.5, -13, 0.5, -13), BackgroundTransparency = 1, Image = Library.Icon, ZIndex = 41, Parent = mob })
 		mob.MouseButton1Click:Connect(function() show(not visible) end)
 		Draggable(mob, mob)
@@ -583,7 +607,7 @@ function Library:CreateWindow(cfg)
 		end
 
 		local tip = Create("Frame", { Size = UDim2.new(0, 0, 0, 22), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(1, 8, 0.5, -11), Visible = false, ZIndex = 45, Parent = btn })
-		Library:AddToRegistry(tip, { BackgroundColor3 = "Element" }); Corner(tip, 7); Pad(tip, 8, 8, 0, 0); Shadow(tip, 10)
+		Library:AddToRegistry(tip, { BackgroundColor3 = "Element" }); Corner(tip, 7); Pad(tip, 8, 8, 0, 0)
 		local tipT = Text(tip, name, 11, true); tipT.AutomaticSize = Enum.AutomaticSize.X; tipT.Size = UDim2.new(0, 0, 1, 0); tipT.ZIndex = 46
 		btn.MouseEnter:Connect(function() tip.Visible = true if window.ActiveTab ~= tab then Tween(btn, { BackgroundTransparency = 0 }, 0.1) end end)
 		btn.MouseLeave:Connect(function() tip.Visible = false if window.ActiveTab ~= tab then Tween(btn, { BackgroundTransparency = 1 }, 0.1) end end)
@@ -935,7 +959,7 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	local arrow = Chevron(btn, 12, "FontDim"); arrow.AnchorPoint = Vector2.new(0.5, 0.5); arrow.Position = UDim2.new(1, -16, 0.5, 0); arrow.ZIndex = 6
 
 	local list, listBody = PopupShell(220, 60, 12, 6)
-	Shadow(list, 14)
+	Shadow(list, 10)
 	Library.OpenPopups[list] = list
 	local search
 	if cfg.Searchable then
@@ -1080,7 +1104,7 @@ function Library._AttachColorPicker(parentObj, parentFrame, idx, cfg)
 	local pop, popBody = PopupShell(W, 70, 12, 10)
 	pop.Size = UDim2.fromOffset(W, popH)
 	popBody:FindFirstChildOfClass("UIListLayout").Padding = UDim.new(0, 8)
-	Shadow(pop, 16)
+	Shadow(pop, 10)
 	Library.OpenPopups[pop] = pop
 
 	local title = Text(popBody, cfg.Title or cfg.Text or idx, 12, true); title.LayoutOrder = 0; title.Size = UDim2.new(1, 0, 0, LINE_H); title.ZIndex = 71
@@ -1263,7 +1287,7 @@ function Library._AttachKeyPicker(parentObj, parentFrame, idx, cfg)
 	local binding = false
 
 	local menu, menuBody = PopupShell(92, 70, 10, 5)
-	Shadow(menu, 12)
+	Shadow(menu, 8)
 	Library.OpenPopups[menu] = menu
 	local modes = {}
 	local modeList = cfg.Modes or { "Always", "Toggle", "Hold" }
@@ -1416,20 +1440,22 @@ function GroupboxMethods:AddESPPreview(cfg)
 			canvas.Parent = f
 			canvas.Position = UDim2.new(0, 0, 0, 24)
 			canvas.Size = UDim2.new(1, 0, 0, 190)
-			floating:Destroy()
+			if floating._shadow then floating._shadow:Destroy() end
+			floating.Frame:Destroy()
 			floating = nil
 			return
 		end
 		local win = Create("Frame", { Size = UDim2.fromOffset(360, 320), Position = UDim2.new(0.5, -180, 0.5, -160), ZIndex = 400, Parent = PopupLayer })
 		Library:AddToRegistry(win, { BackgroundColor3 = "Main" })
-		Corner(win, 14); Stroke(win, "OutlineStrong"); Shadow(win, 20)
+		Corner(win, 14); Stroke(win, "OutlineStrong")
+		local winShadow = Shadow(win, 12)
 		local bar = Create("TextButton", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 401, Parent = win })
 		local tl = Text(bar, "esp preview", 12, true); tl.Position = UDim2.new(0, 12, 0, 0); tl.Size = UDim2.new(1, -40, 1, 0); tl.ZIndex = 402
 		Draggable(bar, win)
 		canvas.Parent = win
 		canvas.Position = UDim2.new(0, 10, 0, 34)
 		canvas.Size = UDim2.new(1, -20, 1, -44)
-		floating = win
+		floating = { Frame = win, _shadow = winShadow }
 	end)
 	local zoomBox = Create("Frame", { Size = UDim2.fromOffset(26, 52), Position = UDim2.new(1, -34, 1, -60), BackgroundTransparency = 1, ZIndex = 12, Parent = canvas })
 	Create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = zoomBox })
@@ -1533,19 +1559,38 @@ function GroupboxMethods:AddESPPreview(cfg)
 		tb.MouseButton1Click:Connect(function() tab:Select() end)
 		table.insert(preview.Tabs, tab)
 	end
-	local chamsHL = nil
+	local chamsSaved = nil
 	function preview:SetChams(on, fillColour, outlineColour, fillTransparency)
-		if not on then
-			if chamsHL then chamsHL:Destroy() chamsHL = nil end
-			return
+		if on then
+			if not chamsSaved then
+				chamsSaved = {}
+				for _, d in ipairs(dummy:GetDescendants()) do
+					if d:IsA("BasePart") then chamsSaved[d] = { c = d.Color, m = d.Material, t = d.Transparency }
+					elseif d:IsA("Decal") or d:IsA("Texture") then chamsSaved[d] = { t = d.Transparency } end
+				end
+			end
+			for d, old in pairs(chamsSaved) do
+				if d.Parent then
+					if old.m ~= nil then
+						d.Color = fillColour or Color3.fromRGB(214, 40, 48)
+						d.Material = Enum.Material.Neon
+						d.Transparency = fillTransparency or 0
+					else
+						d.Transparency = 1
+					end
+				end
+			end
+			for _, t in ipairs(self._tracked or {}) do
+				if t.Parts and t.Parts.BoxStroke then t.Parts.BoxStroke.Color = outlineColour or t.Parts.BoxStroke.Color end
+			end
+		elseif chamsSaved then
+			for d, old in pairs(chamsSaved) do
+				if d.Parent then
+					if old.m ~= nil then d.Color = old.c d.Material = old.m d.Transparency = old.t else d.Transparency = old.t end
+				end
+			end
+			chamsSaved = nil
 		end
-		if not chamsHL then
-			chamsHL = Create("Highlight", { Name = "_chams", DepthMode = Enum.HighlightDepthMode.AlwaysOnTop, Adornee = dummy, Parent = dummy })
-		end
-		chamsHL.FillColor = fillColour or Color3.fromRGB(214, 40, 48)
-		chamsHL.OutlineColor = outlineColour or Color3.fromRGB(255, 255, 255)
-		chamsHL.FillTransparency = fillTransparency or 0.35
-		chamsHL.OutlineTransparency = 0
 	end
 	function preview:GetTab(name) for _, t in ipairs(self.Tabs) do if t.Name == name then return t end end end
 	function preview:Set(name, settings) local t = self:GetTab(name) if t then t:Set(settings) end end
