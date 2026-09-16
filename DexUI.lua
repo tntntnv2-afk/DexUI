@@ -176,14 +176,30 @@ local function Glass(frame)
 end
 local function Shadow(frame, spread)
 	spread = spread or 16
-	local layers = 3
-	for i = 1, layers do
-		local pad = math.floor(spread * i / layers)
-		local sh = Create("Frame", { Name = "_shadow", AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(1, pad * 2, 1, pad * 2), Position = UDim2.new(0.5, 0, 0.5, math.floor(pad * 0.35)), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.82 + (i - 1) * 0.05, BorderSizePixel = 0, ZIndex = (frame.ZIndex or 1) - 1, Parent = frame })
-		Create("UICorner", { CornerRadius = UDim.new(0, 14 + pad), Parent = sh })
+	local holder = frame:FindFirstChild("_shadowHolder")
+	if not holder then
+		holder = Create("Frame", { Name = "_shadowHolder", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = math.max((frame.ZIndex or 1) - 1, 0), Parent = frame })
+		holder.LayoutOrder = -9999
 	end
+	for i = 1, 3 do
+		local pad = math.floor(spread * i / 3)
+		local sh = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(1, pad * 2, 1, pad * 2), Position = UDim2.new(0.5, 0, 0.5, math.floor(pad * 0.3)), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.84 + (i - 1) * 0.05, BorderSizePixel = 0, ZIndex = holder.ZIndex, Parent = holder })
+		Create("UICorner", { CornerRadius = UDim.new(0, 12 + pad), Parent = sh })
+	end
+	return holder
 end
 local PopupLayer = Create("Frame", { Name = "Popups", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 500, Parent = ScreenGui })
+local function PopupShell(width, z, radius, padding)
+	local root = Create("Frame", { Size = UDim2.new(0, width, 0, 0), Visible = false, ZIndex = z or 60, Parent = PopupLayer })
+	Library:AddToRegistry(root, { BackgroundColor3 = "Main" })
+	Create("UICorner", { CornerRadius = UDim.new(0, radius or 12), Parent = root })
+	local st = Create("UIStroke", { Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = root })
+	Library:AddToRegistry(st, { Color = "OutlineStrong" })
+	local content = Create("Frame", { Name = "Content", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = (z or 60) + 1, Parent = root })
+	Create("UIPadding", { PaddingLeft = UDim.new(0, padding or 6), PaddingRight = UDim.new(0, padding or 6), PaddingTop = UDim.new(0, padding or 6), PaddingBottom = UDim.new(0, padding or 6), Parent = content })
+	Create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = content })
+	return root, content
+end
 local popupBase = 500
 local function RaisePopup(frame)
 	popupBase = popupBase + 20
@@ -435,12 +451,13 @@ function Library:CreateWindow(cfg)
 	local sIcon = SearchIcon(searchBox, 13, "FontDim"); sIcon.Position = UDim2.new(0, 11, 0.5, -7); sIcon.ZIndex = 14
 	local searchIn = Create("TextBox", { Size = UDim2.new(1, -34, 1, 0), Position = UDim2.new(0, 26, 0, 0), BackgroundTransparency = 1, Text = "", PlaceholderText = "search settings", TextSize = 12, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 14, Parent = searchBox })
 	self:AddToRegistry(searchIn, { TextColor3 = "Font", PlaceholderColor3 = "FontDim" })
-	local results = Create("Frame", { Size = UDim2.new(0, 260, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.new(1, -282, 0, 58), Visible = false, ZIndex = 40, Parent = head })
-	self:AddToRegistry(results, { BackgroundColor3 = "Main" }); Corner(results, 10); Stroke(results, "Outline"); Shadow(results, 16)
-	Pad(results, 6, 6, 6, 6)
-	Create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = results })
+	local results = Create("Frame", { Size = UDim2.new(0, 260, 0, 0), Position = UDim2.new(1, -282, 0, 58), Visible = false, ZIndex = 40, Parent = head })
+	self:AddToRegistry(results, { BackgroundColor3 = "Main" }); Corner(results, 12); Stroke(results, "Outline"); Shadow(results, 14)
+	local resultsBody = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 41, Parent = results })
+	Pad(resultsBody, 6, 6, 6, 6)
+	Create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = resultsBody })
 	local function runSearch(q)
-		for _, c in ipairs(results:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
+		for _, c in ipairs(resultsBody:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
 		q = string.lower(q or "")
 		if q == "" then results.Visible = false return end
 		local n = 0
@@ -448,7 +465,7 @@ function Library:CreateWindow(cfg)
 			if string.find(string.lower(e.name), q, 1, true) or string.find(string.lower(e.path), q, 1, true) then
 				n = n + 1
 				if n > 7 then break end
-				local b = Create("TextButton", { Size = UDim2.new(1, 0, 0, 34), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, LayoutOrder = n, ZIndex = 41, Parent = results })
+				local b = Create("TextButton", { Size = UDim2.new(1, 0, 0, 34), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, LayoutOrder = n, ZIndex = 41, Parent = resultsBody })
 				Corner(b, 8); Library:AddToRegistry(b, { BackgroundColor3 = "Element" })
 				local nm = Text(b, e.name, 12, true); nm.Position = UDim2.new(0, 10, 0, 4); nm.Size = UDim2.new(1, -20, 0, 14); nm.ZIndex = 42
 				local pt = Text(b, e.path, 10, false, "FontDim"); pt.Position = UDim2.new(0, 10, 0, 18); pt.Size = UDim2.new(1, -20, 0, 12); pt.ZIndex = 42
@@ -457,6 +474,7 @@ function Library:CreateWindow(cfg)
 				b.MouseButton1Click:Connect(function() pcall(e.focus) searchIn.Text = "" results.Visible = false end)
 			end
 		end
+		results.Size = UDim2.new(0, 260, 0, n > 0 and (n * 37 + 9) or 0)
 		results.Visible = n > 0
 	end
 	searchIn:GetPropertyChangedSignal("Text"):Connect(function() runSearch(searchIn.Text) end)
@@ -904,23 +922,25 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	cur.AnchorPoint = Vector2.new(0, 0.5); cur.Position = UDim2.new(0, 10, 0.5, 0); cur.Size = UDim2.new(1, -36, 0, LINE_H); cur.ZIndex = 6
 	local arrow = Chevron(btn, 12, "FontDim"); arrow.AnchorPoint = Vector2.new(0.5, 0.5); arrow.Position = UDim2.new(1, -16, 0.5, 0); arrow.ZIndex = 6
 
-	local list = Create("Frame", { Size = UDim2.new(0, 220, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Visible = false, ZIndex = 60, Parent = PopupLayer })
-	Library:AddToRegistry(list, { BackgroundColor3 = "Main" }); Corner(list, 12); Stroke(list, "OutlineStrong"); Shadow(list, 14)
-	Pad(list, 6, 6, 6, 6)
-	Create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = list })
+	local list, listBody = PopupShell(220, 60, 12, 6)
+	Shadow(list, 14)
 	Library.OpenPopups[list] = list
 	local search
 	if cfg.Searchable then
-		local sf = Create("Frame", { Size = UDim2.new(1, 0, 0, 28), LayoutOrder = 0, ZIndex = 61, Parent = list })
+		local sf = Create("Frame", { Size = UDim2.new(1, 0, 0, 28), LayoutOrder = 0, ZIndex = 61, Parent = listBody })
 		Library:AddToRegistry(sf, { BackgroundColor3 = "Element" }); Corner(sf, 8)
 		local si = SearchIcon(sf, 12, "FontDim"); si.Position = UDim2.new(0, 9, 0.5, -6); si.ZIndex = 62
 		search = Create("TextBox", { Size = UDim2.new(1, -34, 1, 0), Position = UDim2.new(0, 26, 0, 0), BackgroundTransparency = 1, Text = "", PlaceholderText = "search", TextSize = 12, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 62, Parent = sf })
 		Library:AddToRegistry(search, { TextColor3 = "Font", PlaceholderColor3 = "FontDim" })
 	end
-	local scroll = Create("ScrollingFrame", { Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollingDirection = Enum.ScrollingDirection.Y, Active = true, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), LayoutOrder = 1, ZIndex = 61, Parent = list })
+	local scroll = Create("ScrollingFrame", { Size = UDim2.new(1, 0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 3, ScrollingDirection = Enum.ScrollingDirection.Y, Active = true, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), LayoutOrder = 1, ZIndex = 61, Parent = listBody })
 	Library:AddToRegistry(scroll, { ScrollBarImageColor3 = "Accent" })
 	Create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
-	local function sizeScroll(n) scroll.Size = UDim2.new(1, 0, 0, math.clamp(n * 31 - 3, 0, 210)) end
+	local function sizeScroll(n)
+		local h = math.clamp(n * 31 - 3, 0, 210)
+		scroll.Size = UDim2.new(1, 0, 0, h)
+		list.Size = UDim2.new(0, list.Size.X.Offset, 0, h + 12 + (cfg.Searchable and 31 or 0))
+	end
 
 	local obj = { Frame = f, Values = cfg.Values or {}, Multi = cfg.Multi, Type = "Dropdown", Idx = idx, Callback = cfg.Callback, _changed = {} }
 	if cfg.Multi then
@@ -1042,15 +1062,15 @@ function Library._AttachColorPicker(parentObj, parentFrame, idx, cfg)
 
 	local W = 226
 	local popH = 20 + 16 + 8 + 118 + 8 + 12 + 8 + 26 + (cfg.Transparency ~= nil and 20 or 0) + (cfg.Gradient and 78 or 0)
-	local pop = Create("Frame", { Size = UDim2.fromOffset(W, popH), Visible = false, ZIndex = 70, Parent = PopupLayer })
-	Library:AddToRegistry(pop, { BackgroundColor3 = "Main" }); Corner(pop, 12); Stroke(pop, "OutlineStrong"); Shadow(pop, 16)
-	Pad(pop, 10, 10, 10, 10)
-	Create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = pop })
+	local pop, popBody = PopupShell(W, 70, 12, 10)
+	pop.Size = UDim2.fromOffset(W, popH)
+	popBody:FindFirstChildOfClass("UIListLayout").Padding = UDim.new(0, 8)
+	Shadow(pop, 16)
 	Library.OpenPopups[pop] = pop
 
-	local title = Text(pop, cfg.Title or cfg.Text or idx, 12, true); title.LayoutOrder = 0; title.Size = UDim2.new(1, 0, 0, LINE_H); title.ZIndex = 71
+	local title = Text(popBody, cfg.Title or cfg.Text or idx, 12, true); title.LayoutOrder = 0; title.Size = UDim2.new(1, 0, 0, LINE_H); title.ZIndex = 71
 
-	local sv = Create("Frame", { Size = UDim2.new(1, 0, 0, 118), LayoutOrder = 1, BackgroundColor3 = Color3.fromRGB(255, 0, 0), ZIndex = 71, Parent = pop })
+	local sv = Create("Frame", { Size = UDim2.new(1, 0, 0, 118), LayoutOrder = 1, BackgroundColor3 = Color3.fromRGB(255, 0, 0), ZIndex = 71, Parent = popBody })
 	Corner(sv, 8)
 	local satLayer = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 72, Parent = sv })
 	Corner(satLayer, 8)
@@ -1062,7 +1082,7 @@ function Library._AttachColorPicker(parentObj, parentFrame, idx, cfg)
 	local svCur = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(10, 10), BackgroundTransparency = 1, ZIndex = 76, Parent = sv })
 	Corner(svCur, 5); Create("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2, Parent = svCur })
 
-	local hue = Create("Frame", { Size = UDim2.new(1, 0, 0, 12), LayoutOrder = 2, ZIndex = 71, Parent = pop })
+	local hue = Create("Frame", { Size = UDim2.new(1, 0, 0, 12), LayoutOrder = 2, ZIndex = 71, Parent = popBody })
 	Corner(hue, 6)
 	Create("UIGradient", { Color = ColorSequence.new({
 		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)), ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
@@ -1075,7 +1095,7 @@ function Library._AttachColorPicker(parentObj, parentFrame, idx, cfg)
 
 	local alpha, alphaCur
 	if cfg.Transparency ~= nil then
-		alpha = Create("Frame", { Size = UDim2.new(1, 0, 0, 12), LayoutOrder = 3, BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 71, Parent = pop })
+		alpha = Create("Frame", { Size = UDim2.new(1, 0, 0, 12), LayoutOrder = 3, BackgroundColor3 = Color3.new(1, 1, 1), ZIndex = 71, Parent = popBody })
 		Corner(alpha, 6)
 		Create("UIGradient", { Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(0, 0, 0)), Parent = alpha })
 		local aHit = Create("TextButton", { Size = UDim2.new(1, 0, 1, 6), Position = UDim2.new(0, 0, 0, -3), BackgroundTransparency = 1, Text = "", ZIndex = 74, Parent = alpha })
@@ -1084,21 +1104,21 @@ function Library._AttachColorPicker(parentObj, parentFrame, idx, cfg)
 		obj._aHit = aHit
 	end
 
-	local hexF = Create("Frame", { Size = UDim2.new(1, 0, 0, 26), LayoutOrder = 4, ZIndex = 71, Parent = pop })
+	local hexF = Create("Frame", { Size = UDim2.new(1, 0, 0, 26), LayoutOrder = 4, ZIndex = 71, Parent = popBody })
 	Library:AddToRegistry(hexF, { BackgroundColor3 = "Element" }); Corner(hexF, 8); Stroke(hexF, "Outline")
 	local hexBox = Create("TextBox", { Size = UDim2.new(1, -16, 1, 0), Position = UDim2.new(0, 8, 0, 0), BackgroundTransparency = 1, Text = toHex(obj.Value), TextSize = 12, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 72, Parent = hexF })
 	Library:AddToRegistry(hexBox, { TextColor3 = "Font" })
 
 	local stopA, stopB, rotTrack, rotFill, prevGrad
 	if cfg.Gradient then
-		local gRow = Create("Frame", { Size = UDim2.new(1, 0, 0, 18), LayoutOrder = 5, ZIndex = 71, Parent = pop })
+		local gRow = Create("Frame", { Size = UDim2.new(1, 0, 0, 18), LayoutOrder = 5, ZIndex = 71, Parent = popBody })
 		Corner(gRow, 6)
 		prevGrad = Create("UIGradient", { Parent = gRow })
-		local sRow = Create("Frame", { Size = UDim2.new(1, 0, 0, 24), LayoutOrder = 6, BackgroundTransparency = 1, ZIndex = 71, Parent = pop })
+		local sRow = Create("Frame", { Size = UDim2.new(1, 0, 0, 24), LayoutOrder = 6, BackgroundTransparency = 1, ZIndex = 71, Parent = popBody })
 		stopA = Create("TextButton", { Size = UDim2.new(0.5, -3, 1, 0), Text = "stop 1", TextSize = 11, FontFace = Library.FontFaceBold, AutoButtonColor = false, ZIndex = 72, Parent = sRow })
 		stopB = Create("TextButton", { Size = UDim2.new(0.5, -3, 1, 0), Position = UDim2.new(0.5, 3, 0, 0), Text = "stop 2", TextSize = 11, FontFace = Library.FontFaceBold, AutoButtonColor = false, ZIndex = 72, Parent = sRow })
 		for _, b in ipairs({ stopA, stopB }) do Corner(b, 7); Library:AddToRegistry(b, { BackgroundColor3 = "Element", TextColor3 = "Font" }) end
-		local rRow = Create("Frame", { Size = UDim2.new(1, 0, 0, 18), LayoutOrder = 7, BackgroundTransparency = 1, ZIndex = 71, Parent = pop })
+		local rRow = Create("Frame", { Size = UDim2.new(1, 0, 0, 18), LayoutOrder = 7, BackgroundTransparency = 1, ZIndex = 71, Parent = popBody })
 		local rl = Text(rRow, "rotation", 11, false, "FontDim"); rl.AnchorPoint = Vector2.new(0, 0.5); rl.Position = UDim2.new(0, 0, 0.5, 0); rl.Size = UDim2.new(0, 56, 0, LINE_H); rl.ZIndex = 72
 		rotTrack = Create("TextButton", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.new(1, -62, 0, 8), Position = UDim2.new(1, 0, 0.5, 0), Text = "", AutoButtonColor = false, ZIndex = 72, Parent = rRow })
 		Library:AddToRegistry(rotTrack, { BackgroundColor3 = "Element" }); Corner(rotTrack, 4)
@@ -1227,14 +1247,14 @@ function Library._AttachKeyPicker(parentObj, parentFrame, idx, cfg)
 	local obj = { Frame = btn, Type = "KeyPicker", Idx = idx, Mode = cfg.Mode or "Toggle", Value = cfg.Default or "None", Toggled = false, Callback = cfg.Callback, ChangedCallback = cfg.ChangedCallback, SyncToggleState = cfg.SyncToggleState, Text = cfg.Text or idx, _changed = {} }
 	local binding = false
 
-	local menu = Create("Frame", { Size = UDim2.new(0, 88, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Visible = false, ZIndex = 70, Parent = PopupLayer })
-	Library:AddToRegistry(menu, { BackgroundColor3 = "Main" }); Corner(menu, 10); Stroke(menu, "OutlineStrong"); Shadow(menu, 12)
-	Pad(menu, 5, 5, 5, 5)
-	Create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = menu })
+	local menu, menuBody = PopupShell(92, 70, 10, 5)
+	Shadow(menu, 12)
 	Library.OpenPopups[menu] = menu
 	local modes = {}
-	for i, mode in ipairs(cfg.Modes or { "Always", "Toggle", "Hold" }) do
-		local mb = Create("TextButton", { Size = UDim2.new(1, 0, 0, 24), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, LayoutOrder = i, ZIndex = 71, Parent = menu })
+	local modeList = cfg.Modes or { "Always", "Toggle", "Hold" }
+	menu.Size = UDim2.fromOffset(92, #modeList * 27 + 7)
+	for i, mode in ipairs(modeList) do
+		local mb = Create("TextButton", { Size = UDim2.new(1, 0, 0, 24), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, LayoutOrder = i, ZIndex = 71, Parent = menuBody })
 		Corner(mb, 7); Library:AddToRegistry(mb, { BackgroundColor3 = "Element" })
 		local ml = Text(mb, string.lower(mode), 11, true, "FontDim")
 		ml.AnchorPoint = Vector2.new(0, 0.5); ml.Position = UDim2.new(0, 8, 0.5, 0); ml.Size = UDim2.new(1, -16, 0, 14); ml.ZIndex = 72
@@ -1364,7 +1384,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 	canvas.Active = true
 	canvas.InputChanged:Connect(function(inp)
 		if inp.UserInputType == Enum.UserInputType.MouseWheel then
-			dist = math.clamp(dist - inp.Position.Z * 0.9, 3.5, 22)
+			dist = math.clamp(dist - inp.Position.Z * 1.2, 3.5, 22)
 		end
 	end)
 	local zoomBox = Create("Frame", { Size = UDim2.fromOffset(26, 52), Position = UDim2.new(1, -34, 1, -60), BackgroundTransparency = 1, ZIndex = 12, Parent = canvas })
