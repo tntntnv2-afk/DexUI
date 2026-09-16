@@ -161,6 +161,67 @@ local function Chevron(parent, size, themeKey)
 	Library:AddToRegistry(b, { BackgroundColor3 = themeKey or "FontDim" })
 	return holder
 end
+-- simple vector icons, drawn so they always render and always match the theme
+local function Icon(parent, name, size, themeKey)
+	size = size or 18
+	local key = themeKey or "FontDim"
+	local root = Create("Frame", { Name = "Icon", Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1, ZIndex = (parent.ZIndex or 1) + 1, Parent = parent })
+	local parts = {}
+	local function bar(w, h, x, y, rot, r)
+		local f = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(w, h), Position = UDim2.new(0.5, x, 0.5, y), Rotation = rot or 0, BorderSizePixel = 0, ZIndex = root.ZIndex, Parent = root })
+		Create("UICorner", { CornerRadius = UDim.new(0, r or 1), Parent = f })
+		Library:AddToRegistry(f, { BackgroundColor3 = key })
+		parts[#parts + 1] = { f = f, fill = true }
+		return f
+	end
+	local function ring(w, h, x, y, thick)
+		local f = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(w, h), Position = UDim2.new(0.5, x, 0.5, y), BackgroundTransparency = 1, ZIndex = root.ZIndex, Parent = root })
+		Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = f })
+		local s = Create("UIStroke", { Thickness = thick or 1.5, Parent = f })
+		Library:AddToRegistry(s, { Color = key })
+		parts[#parts + 1] = { f = s, fill = false }
+		return f
+	end
+	local function box(w, h, x, y, thick, r)
+		local f = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(w, h), Position = UDim2.new(0.5, x, 0.5, y), BackgroundTransparency = 1, ZIndex = root.ZIndex, Parent = root })
+		Create("UICorner", { CornerRadius = UDim.new(0, r or 2), Parent = f })
+		local s = Create("UIStroke", { Thickness = thick or 1.5, Parent = f })
+		Library:AddToRegistry(s, { Color = key })
+		parts[#parts + 1] = { f = s, fill = false }
+		return f
+	end
+
+	if name == "sliders" then
+		bar(14, 1.5, 0, -5) bar(4, 4, 3, -5, 0, 2)
+		bar(14, 1.5, 0, 0) bar(4, 4, -3, 0, 0, 2)
+		bar(14, 1.5, 0, 5) bar(4, 4, 2, 5, 0, 2)
+	elseif name == "eye" then
+		ring(16, 10, 0, 0, 1.5) bar(5, 5, 0, 0, 0, 3)
+	elseif name == "gear" then
+		ring(11, 11, 0, 0, 1.5) bar(3, 3, 0, -7, 0, 1) bar(3, 3, 0, 7, 0, 1)
+		bar(3, 3, -7, 0, 0, 1) bar(3, 3, 7, 0, 0, 1)
+		bar(3, 3, -5, -5, 45, 1) bar(3, 3, 5, 5, 45, 1)
+	elseif name == "user" then
+		ring(8, 8, 0, -4, 1.5) box(14, 8, 0, 5, 1.5, 4)
+	elseif name == "target" then
+		ring(15, 15, 0, 0, 1.5) ring(6, 6, 0, 0, 1.5) bar(2, 2, 0, 0, 0, 1)
+	elseif name == "bolt" then
+		bar(3, 9, 1, -4, 18, 1) bar(3, 9, -1, 4, 18, 1) bar(7, 1.5, 0, 0, 18)
+	elseif name == "shield" then
+		box(13, 14, 0, 0, 1.5, 6)
+	elseif name == "grid" then
+		box(6, 6, -4, -4, 1.5, 1) box(6, 6, 4, -4, 1.5, 1) box(6, 6, -4, 4, 1.5, 1) box(6, 6, 4, 4, 1.5, 1)
+	else
+		ring(14, 14, 0, 0, 1.5)
+	end
+	function root:SetKey(k)
+		for _, pr in ipairs(parts) do
+			if pr.fill then Library.Registry[pr.f] = { BackgroundColor3 = k } pr.f.BackgroundColor3 = Library.Theme[k]
+			else Library.Registry[pr.f] = { Color = k } pr.f.Color = Library.Theme[k] end
+		end
+	end
+	return root
+end
 local function Hover(btn, normalKey, hoverKey)
 	btn.MouseEnter:Connect(function() Tween(btn, { BackgroundColor3 = Library.Theme[hoverKey] }, 0.1) end)
 	btn.MouseLeave:Connect(function() Tween(btn, { BackgroundColor3 = Library.Theme[normalKey] }, 0.1) end)
@@ -480,7 +541,7 @@ function Library:CreateWindow(cfg)
 	end
 	window.Frame = main
 
-	local rail = Create("Frame", { Name = "Rail", Size = UDim2.new(0, 68, 1, 0), BorderSizePixel = 0, ZIndex = 11, Parent = main })
+	local rail = Create("Frame", { Name = "Rail", Size = UDim2.new(0, 84, 1, 0), BorderSizePixel = 0, ZIndex = 11, Parent = main })
 	self:AddToRegistry(rail, { BackgroundColor3 = "Main" })
 	Corner(rail, 16)
 	local railPatch = Create("Frame", { Size = UDim2.new(0, 16, 1, 0), Position = UDim2.new(1, -16, 0, 0), BorderSizePixel = 0, ZIndex = 11, Parent = rail })
@@ -490,8 +551,6 @@ function Library:CreateWindow(cfg)
 	local railList = Create("Frame", { Size = UDim2.new(1, 0, 1, -140), Position = UDim2.new(0, 0, 0, 68), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
 	Create("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = railList })
 
-	local pill = Create("Frame", { Size = UDim2.fromOffset(3, 20), Position = UDim2.new(0, 0, 0, 80), AnchorPoint = Vector2.new(0, 0.5), ZIndex = 14, Parent = rail })
-	self:AddToRegistry(pill, { BackgroundColor3 = "Accent" }); Corner(pill, 2)
 
 
 	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(50, 24), Position = UDim2.new(0.5, 0, 1, -12), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
@@ -517,7 +576,7 @@ function Library:CreateWindow(cfg)
 		end
 	end))
 
-	local head = Create("Frame", { Size = UDim2.new(1, -68, 0, 72), Position = UDim2.new(0, 68, 0, 0), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
+	local head = Create("Frame", { Size = UDim2.new(1, -84, 0, 72), Position = UDim2.new(0, 84, 0, 0), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
 	local pageTitle = Text(head, "", 21, true); pageTitle.Position = UDim2.new(0, 24, 0, 13); pageTitle.Size = UDim2.new(0.5, 0, 0, 26); pageTitle.ZIndex = 13
 	local titleBar = Create("Frame", { Size = UDim2.fromOffset(18, 2), Position = UDim2.new(0, 24, 0, 40), ZIndex = 13, Parent = head })
 	Corner(titleBar, 1); self:AddToRegistry(titleBar, { BackgroundColor3 = "Accent" })
@@ -588,11 +647,11 @@ function Library:CreateWindow(cfg)
 		task.delay(0.25, function() if searchIn.Text == "" then results.Visible = false end end)
 	end)
 
-	local body = Create("Frame", { Size = UDim2.new(1, -68, 1, -104), Position = UDim2.new(0, 68, 0, 72), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
+	local body = Create("Frame", { Size = UDim2.new(1, -84, 1, -104), Position = UDim2.new(0, 84, 0, 72), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
 	local fade = Create("Frame", { Size = UDim2.new(1, 0, 0, 26), Position = UDim2.new(0, 0, 1, -26), BorderSizePixel = 0, ZIndex = 20, Parent = body })
 	self:AddToRegistry(fade, { BackgroundColor3 = "Background" })
 	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.15) }), Parent = fade })
-	local footer = Create("Frame", { Size = UDim2.new(1, -68, 0, 32), Position = UDim2.new(0, 68, 1, -32), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
+	local footer = Create("Frame", { Size = UDim2.new(1, -84, 0, 32), Position = UDim2.new(0, 84, 1, -32), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
 	local footLine = Create("Frame", { Size = UDim2.new(1, -44, 0, 1), Position = UDim2.new(0, 22, 0, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 12, Parent = footer })
 	self:AddToRegistry(footLine, { BackgroundColor3 = "Outline" })
 	local footL = Text(footer, cfg.Footer or "", 10, false, "FontDim"); footL.Position = UDim2.new(0, 22, 0, 0); footL.Size = UDim2.new(0.5, 0, 1, 0); footL.ZIndex = 13
@@ -667,24 +726,25 @@ function Library:CreateWindow(cfg)
 	function window:AddTab(name, icon)
 		order = order + 1
 		local tab = { Name = name, Subtabs = {} }
-		local slot = Create("Frame", { Size = UDim2.fromOffset(48, 48), BackgroundTransparency = 1, LayoutOrder = order, ZIndex = 12, Parent = railList })
-		local btn = Create("TextButton", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(44, 44), Position = UDim2.new(0.5, 0, 0.5, 0), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 13, Parent = slot })
-		Corner(btn, 14); Library:AddToRegistry(btn, { BackgroundColor3 = "Element" })
+		local slot = Create("Frame", { Size = UDim2.fromOffset(76, 56), BackgroundTransparency = 1, LayoutOrder = order, ZIndex = 12, Parent = railList })
+		local btn = Create("TextButton", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(72, 52), Position = UDim2.new(0.5, 0, 0.5, 0), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 13, Parent = slot })
+		Corner(btn, 10); Library:AddToRegistry(btn, { BackgroundColor3 = "Element" })
 		local glyph
-		if icon and cfg.UseIcons ~= false then
-			glyph = Create("ImageLabel", { Size = UDim2.fromOffset(20, 20), Position = UDim2.new(0.5, -10, 0.5, -10), BackgroundTransparency = 1, Image = (type(icon) == "number") and ("rbxassetid://" .. icon) or tostring(icon), ZIndex = 14, Parent = btn })
+		if type(icon) == "number" or (type(icon) == "string" and string.sub(icon, 1, 3) == "rbx") then
+			glyph = Create("ImageLabel", { Size = UDim2.fromOffset(18, 18), Position = UDim2.new(0.5, -9, 0, 9), BackgroundTransparency = 1, Image = (type(icon) == "number") and ("rbxassetid://" .. icon) or tostring(icon), ZIndex = 14, Parent = btn })
 			Library:AddToRegistry(glyph, { ImageColor3 = "FontDim" })
 		else
-			glyph = Text(btn, string.lower(string.sub(name, 1, 3)), 11, true, "FontDim")
-			glyph.TextXAlignment = Enum.TextXAlignment.Center; glyph.Size = UDim2.new(1, 0, 1, 0); glyph.ZIndex = 14
+			glyph = Icon(btn, icon or "grid", 18, "FontDim")
+			glyph.Position = UDim2.new(0.5, -9, 0, 9)
+			glyph.ZIndex = 14
 		end
+		local lbl = Text(btn, string.lower(name), 10, true, "FontDim")
+		lbl.TextXAlignment = Enum.TextXAlignment.Center
+		lbl.Position = UDim2.new(0, 0, 1, -18); lbl.Size = UDim2.new(1, 0, 0, 14); lbl.ZIndex = 14
+		btn.MouseEnter:Connect(function() if window.ActiveTab ~= tab then Tween(btn, { BackgroundTransparency = 0.6 }, 0.1) Tween(lbl, { TextColor3 = Library.Theme.Font }, 0.1) end end)
+		btn.MouseLeave:Connect(function() if window.ActiveTab ~= tab then Tween(btn, { BackgroundTransparency = 1 }, 0.1) Tween(lbl, { TextColor3 = Library.Theme.FontDim }, 0.1) end end)
+		tab._btn, tab._glyph, tab._label = btn, glyph, lbl
 
-		local tip = Create("Frame", { Size = UDim2.new(0, 0, 0, 22), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(1, 8, 0.5, -11), Visible = false, ZIndex = 45, Parent = btn })
-		Library:AddToRegistry(tip, { BackgroundColor3 = "Main" }); Corner(tip, 6); Pad(tip, 8, 8, 0, 0); Stroke(tip, "Outline")
-		local tipT = Text(tip, name, 11, true); tipT.AutomaticSize = Enum.AutomaticSize.X; tipT.Size = UDim2.new(0, 0, 1, 0); tipT.ZIndex = 46
-		btn.MouseEnter:Connect(function() tip.Visible = true if window.ActiveTab ~= tab then Tween(btn, { BackgroundTransparency = 0 }, 0.1) end end)
-		btn.MouseLeave:Connect(function() tip.Visible = false if window.ActiveTab ~= tab then Tween(btn, { BackgroundTransparency = 1 }, 0.1) end end)
-		tab._btn, tab._glyph = btn, glyph
 
 		local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 11, Parent = body })
 		tab.Page = page
@@ -707,16 +767,18 @@ function Library:CreateWindow(cfg)
 			for _, t in ipairs(window.Tabs) do
 				t.Page.Visible = false
 				Tween(t._btn, { BackgroundTransparency = 1 }, 0.12)
-				if t._glyph:IsA("ImageLabel") then Tween(t._glyph, { ImageColor3 = Library.Theme.FontDim }, 0.12) else Tween(t._glyph, { TextColor3 = Library.Theme.FontDim }, 0.12) end
+				Tween(t._label, { TextColor3 = Library.Theme.FontDim }, 0.12)
+				if t._glyph:IsA("ImageLabel") then Tween(t._glyph, { ImageColor3 = Library.Theme.FontDim }, 0.12)
+				elseif t._glyph.SetKey then t._glyph:SetKey("FontDim") end
 			end
 			self.Page.Visible = true
 			Tween(self._btn, { BackgroundTransparency = 0 }, 0.12)
-			if self._glyph:IsA("ImageLabel") then Tween(self._glyph, { ImageColor3 = Library.Theme.Accent }, 0.12) else Tween(self._glyph, { TextColor3 = Library.Theme.Accent }, 0.12) end
+			Tween(self._label, { TextColor3 = Library.Theme.Font }, 0.12)
+			if self._glyph:IsA("ImageLabel") then Tween(self._glyph, { ImageColor3 = Library.Theme.Accent }, 0.12)
+			elseif self._glyph.SetKey then self._glyph:SetKey("Accent") end
 			pageTitle.Text = name
 			task.defer(function() Tween(titleBar, { Size = UDim2.fromOffset(math.clamp(pageTitle.TextBounds.X, 18, 140), 2) }, 0.22, Enum.EasingStyle.Quint) end)
 			window.ActiveTab = self
-			local y = self._btn.AbsolutePosition.Y - rail.AbsolutePosition.Y + self._btn.AbsoluteSize.Y * 0.5
-			Tween(pill, { Position = UDim2.new(0, 0, 0, y) }, 0.22, Enum.EasingStyle.Back)
 
 			local i = 0
 			for _, c in ipairs(self._cols) do
