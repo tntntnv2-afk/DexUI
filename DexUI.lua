@@ -1,4 +1,3 @@
-
 local Library = (function()
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -60,7 +59,6 @@ pcall(function() ScreenGui.Parent = getGuiParent() end)
 if not ScreenGui.Parent then ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
 Library.ScreenGui = ScreenGui
 
--- ---------------------------------------------------------------- helpers
 local function Create(class, props, children)
 	local inst = Instance.new(class)
 	for k, v in pairs(props or {}) do if k ~= "Parent" then inst[k] = v end end
@@ -115,7 +113,7 @@ local function Draggable(handle, frame)
 		end
 	end))
 end
--- click ripple, used on every pressable surface
+
 local function Ripple(btn, color)
 	btn.ClipsDescendants = true
 	btn.InputBegan:Connect(function(inp)
@@ -129,7 +127,7 @@ local function Ripple(btn, color)
 		task.delay(0.5, function() c:Destroy() end)
 	end)
 end
--- squash on press so buttons feel physical
+
 local function Press(btn, scale)
 	local s = Create("UIScale", { Scale = 1, Parent = btn })
 	btn.InputBegan:Connect(function(inp)
@@ -144,7 +142,7 @@ local function Press(btn, scale)
 	end)
 	return s
 end
--- drawn icons: no font glyphs, so nothing can render as a missing-character box
+
 local function SearchIcon(parent, size, themeKey)
 	local holder = Create("Frame", { Size = UDim2.fromOffset(size, size), BackgroundTransparency = 1, ZIndex = (parent.ZIndex or 1) + 1, Parent = parent })
 	local ring = Create("Frame", { Size = UDim2.fromOffset(size - 5, size - 5), Position = UDim2.fromOffset(0, 0), BackgroundTransparency = 1, ZIndex = holder.ZIndex, Parent = holder })
@@ -167,7 +165,7 @@ local function Hover(btn, normalKey, hoverKey)
 	btn.MouseEnter:Connect(function() Tween(btn, { BackgroundColor3 = Library.Theme[hoverKey] }, 0.1) end)
 	btn.MouseLeave:Connect(function() Tween(btn, { BackgroundColor3 = Library.Theme[normalKey] }, 0.1) end)
 end
--- glass: a light top-down sheen + hairline highlight so panels read as frosted, not flat
+
 local function Glass(frame)
 	local sheen = Create("Frame", { Name = "_glass", Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.93, BorderSizePixel = 0, ZIndex = (frame.ZIndex or 1), Parent = frame })
 	Create("UICorner", { CornerRadius = UDim.new(0, 12), Parent = sheen })
@@ -201,7 +199,6 @@ Library.Create, Library.Tween, Library.Text, Library.Draggable = Create, Tween, 
 Library.Ripple, Library.Press = Ripple, Press
 Library.Glass, Library.Shadow = Glass, Shadow
 
--- ---------------------------------------------------------------- backdrop: blur + snow
 local Backdrop = Create("Frame", { Name = "Backdrop", Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(0, 0, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 0, Parent = ScreenGui })
 Create("UIGradient", {
 	Rotation = 90,
@@ -258,7 +255,6 @@ function Library:_SetBackdrop(on)
 end
 function Library:SetEffects(cfg) for k, v in pairs(cfg) do self.Effects[k] = v end end
 
--- ---------------------------------------------------------------- notifications
 local NotifHolder = Create("Frame", { Name = "Notifications", BackgroundTransparency = 1, Size = UDim2.new(0, 280, 1, -20), Position = UDim2.new(1, -292, 0, 12), Parent = ScreenGui })
 Create("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = NotifHolder })
 function Library:SetNotifySide(side)
@@ -290,7 +286,6 @@ function Library:Notify(opts, duration)
 	return obj
 end
 
--- ---------------------------------------------------------------- watermark + search
 local Watermark = Create("Frame", { Name = "Watermark", Size = UDim2.new(0, 0, 0, 26), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(0, 12, 0, 12), Visible = false, Parent = ScreenGui })
 Library:AddToRegistry(Watermark, { BackgroundColor3 = "Main" })
 Watermark.BackgroundTransparency = 0.12; Corner(Watermark, 2); Stroke(Watermark, "Outline")
@@ -336,7 +331,6 @@ end
 WmSearch:GetPropertyChangedSignal("Text"):Connect(function() runSearch(WmSearch.Text) end)
 Draggable(Watermark, Watermark)
 
--- ---------------------------------------------------------------- keybind list
 local KeybindFrame = Create("Frame", { Name = "Keybinds", Size = UDim2.new(0, 150, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.new(0, 12, 0.5, -60), Visible = false, Parent = ScreenGui })
 Library:AddToRegistry(KeybindFrame, { BackgroundColor3 = "Main" }); Corner(KeybindFrame, 2); Stroke(KeybindFrame, "Outline")
 local kbAccent = Create("Frame", { Size = UDim2.new(1, 0, 0, 1), BorderSizePixel = 0, Parent = KeybindFrame })
@@ -349,7 +343,6 @@ Draggable(KeybindFrame, KeybindFrame)
 KeybindFrame.Visible = false
 function Library:SetKeybindVisibility(on) KeybindFrame.Visible = on and true or false end
 
--- ---------------------------------------------------------------- popups (outside-click close)
 function Library:_ClosePopups(except) for _, p in pairs(self.OpenPopups) do if p ~= except then pcall(function() p.Visible = false end) end end end
 Library:GiveSignal(UserInputService.InputBegan:Connect(function(inp)
 	if not IsPressed(inp) then return end
@@ -363,7 +356,6 @@ Library:GiveSignal(UserInputService.InputBegan:Connect(function(inp)
 	end
 end))
 
--- ---------------------------------------------------------------- window
 function Library:CreateWindow(cfg)
 	cfg = cfg or {}
 	local window = { Tabs = {}, ActiveTab = nil }
@@ -382,7 +374,6 @@ function Library:CreateWindow(cfg)
 	Shadow(main, 34)
 	window.Frame = main
 
-	-- ---------------------------------------------------------------- left rail
 	local rail = Create("Frame", { Name = "Rail", Size = UDim2.new(0, 68, 1, 0), BorderSizePixel = 0, ZIndex = 11, Parent = main })
 	self:AddToRegistry(rail, { BackgroundColor3 = "Main" })
 	local railEdge = Create("Frame", { Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(1, -1, 0, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 12, Parent = rail })
@@ -402,13 +393,12 @@ function Library:CreateWindow(cfg)
 	end)
 	local railList = Create("Frame", { Size = UDim2.new(1, 0, 1, -140), Position = UDim2.new(0, 0, 0, 68), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
 	Create("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = railList })
-	-- sliding indicator
+
 	local pill = Create("Frame", { Size = UDim2.fromOffset(3, 24), Position = UDim2.new(0, 0, 0, 80), AnchorPoint = Vector2.new(0, 0.5), ZIndex = 14, Parent = rail })
 	self:AddToRegistry(pill, { BackgroundColor3 = "Accent" }); Corner(pill, 2)
 	local pillGlow = Create("ImageLabel", { Size = UDim2.fromOffset(52, 52), Position = UDim2.new(0, -16, 0.5, -26), BackgroundTransparency = 1, Image = "rbxassetid://5028857084", ImageTransparency = 0.6, ZIndex = 13, Parent = pill })
 	self:AddToRegistry(pillGlow, { ImageColor3 = "Accent" })
-	-- toggle hint at the bottom of the rail
-	-- click-to-rebind menu key chip
+
 	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(50, 24), Position = UDim2.new(0.5, 0, 1, -12), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
 	Corner(hintBtn, 8); self:AddToRegistry(hintBtn, { BackgroundColor3 = "Element" }); Stroke(hintBtn, "Outline")
 	local hint = Text(hintBtn, "", 10, true, "FontDim"); hint.TextXAlignment = Enum.TextXAlignment.Center; hint.Size = UDim2.new(1, 0, 1, 0); hint.ZIndex = 31
@@ -432,7 +422,6 @@ function Library:CreateWindow(cfg)
 		end
 	end))
 
-	-- ---------------------------------------------------------------- header
 	local head = Create("Frame", { Size = UDim2.new(1, -68, 0, 72), Position = UDim2.new(0, 68, 0, 0), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
 	local pageTitle = Text(head, "", 21, true); pageTitle.Position = UDim2.new(0, 24, 0, 13); pageTitle.Size = UDim2.new(0.5, 0, 0, 26); pageTitle.ZIndex = 13
 	local titleBar = Create("Frame", { Size = UDim2.fromOffset(24, 3), Position = UDim2.new(0, 24, 0, 41), ZIndex = 13, Parent = head })
@@ -473,7 +462,6 @@ function Library:CreateWindow(cfg)
 	searchIn:GetPropertyChangedSignal("Text"):Connect(function() runSearch(searchIn.Text) end)
 	searchIn.FocusLost:Connect(function() task.delay(0.2, function() if searchIn.Text == "" then results.Visible = false end end) end)
 
-	-- ---------------------------------------------------------------- body + footer
 	local body = Create("Frame", { Size = UDim2.new(1, -68, 1, -104), Position = UDim2.new(0, 68, 0, 72), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
 	local footer = Create("Frame", { Size = UDim2.new(1, -68, 0, 32), Position = UDim2.new(0, 68, 1, -32), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
 	local footLine = Create("Frame", { Size = UDim2.new(1, -44, 0, 1), Position = UDim2.new(0, 22, 0, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 12, Parent = footer })
@@ -492,7 +480,6 @@ function Library:CreateWindow(cfg)
 		end
 	end)
 
-	-- ---------------------------------------------------------------- visibility
 	local visible = cfg.AutoShow ~= false
 	local winScale = Create("UIScale", { Scale = 1, Parent = main })
 	local function show(on)
@@ -504,7 +491,7 @@ function Library:CreateWindow(cfg)
 			main.BackgroundTransparency = 1
 			Tween(winScale, { Scale = 1 }, 0.34, Enum.EasingStyle.Back)
 			Tween(main, { BackgroundTransparency = 0 }, 0.2)
-			-- rail items cascade in
+
 			for i, t in ipairs(window.Tabs) do
 				local sc = t._btn:FindFirstChildOfClass("UIScale") or Create("UIScale", { Parent = t._btn })
 				sc.Scale = 0.6
@@ -535,7 +522,6 @@ function Library:CreateWindow(cfg)
 		Draggable(mob, mob)
 	end
 
-	-- ---------------------------------------------------------------- tabs
 	local order = 0
 	local function columns(parent, top)
 		local l = Create("ScrollingFrame", { Size = UDim2.new(0.5, -28, 1, -top), Position = UDim2.new(0, 22, 0, top), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageTransparency = 0.5, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ZIndex = 12, Parent = parent })
@@ -563,7 +549,7 @@ function Library:CreateWindow(cfg)
 			glyph = Text(btn, string.upper(string.sub(name, 1, 2)), 12, true, "FontDim")
 			glyph.TextXAlignment = Enum.TextXAlignment.Center; glyph.Size = UDim2.new(1, 0, 1, 0); glyph.ZIndex = 14
 		end
-		-- hover label
+
 		local tip = Create("Frame", { Size = UDim2.new(0, 0, 0, 22), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(1, 8, 0.5, -11), Visible = false, ZIndex = 45, Parent = btn })
 		Library:AddToRegistry(tip, { BackgroundColor3 = "Element" }); Corner(tip, 7); Pad(tip, 8, 8, 0, 0); Shadow(tip, 10)
 		local tipT = Text(tip, name, 11, true); tipT.AutomaticSize = Enum.AutomaticSize.X; tipT.Size = UDim2.new(0, 0, 1, 0); tipT.ZIndex = 46
@@ -602,7 +588,7 @@ function Library:CreateWindow(cfg)
 			window.ActiveTab = self
 			local y = self._btn.AbsolutePosition.Y - rail.AbsolutePosition.Y + self._btn.AbsoluteSize.Y * 0.5
 			Tween(pill, { Position = UDim2.new(0, 0, 0, y) }, 0.22, Enum.EasingStyle.Back)
-			-- cards stagger in
+
 			local i = 0
 			for _, c in ipairs(self._cols) do
 				for _, card in ipairs(c:GetChildren()) do
@@ -659,7 +645,6 @@ function Library:CreateWindow(cfg)
 		return tab
 	end
 
-	-- ---------------------------------------------------------------- cards
 	local gbOrder = 0
 	function window:_MakeGroupbox(column, name, path, tabRef, subRef)
 		gbOrder = gbOrder + 1
@@ -692,13 +677,9 @@ function Library:CreateWindow(cfg)
 	return window
 end
 
--- ================================================================ elements
 local GroupboxMethods = {}
 Library.GroupboxMethods = GroupboxMethods
 
--- one strict layout system:
---   ROW_H      single-line rows (toggle, keypicker, colorpicker, label)
---   STACK_H    label line + control (input, dropdown, slider)
 local ROW_H, LINE_H, CTRL_H = 24, 16, 30
 
 local function row(gb, h)
@@ -706,7 +687,6 @@ local function row(gb, h)
 end
 local function reg(gb, name, frame) Library:RegisterSearch(name, gb.Path, function() gb:_focus(frame) end) end
 
--- right-hand controls live in one right-aligned strip; labels shrink to fit it
 local function slotHolder(frame)
 	local h = frame:FindFirstChild("_slots")
 	if h then return h end
@@ -724,7 +704,7 @@ local function bindLabelWidth(label, frame, leftInset)
 	fit()
 	return fit
 end
--- a label line that always sits on the same baseline
+
 local function lineLabel(parent, text, dim)
 	local l = Text(parent, text, 12, false, dim and "FontDim" or "Font")
 	l.AnchorPoint = Vector2.new(0, 0.5)
@@ -734,7 +714,6 @@ local function lineLabel(parent, text, dim)
 	return l
 end
 
--- label / divider ------------------------------------------------------------
 function GroupboxMethods:AddLabel(text, wrap)
 	local f = row(self, LINE_H)
 	local l = Text(f, text, 12, false, "FontDim")
@@ -758,7 +737,6 @@ function GroupboxMethods:AddDivider()
 	return { Frame = f }
 end
 
--- button ---------------------------------------------------------------------
 local function makeButton(parent, cfg, width, xScale, xOffset)
 	local b = Create("TextButton", { Size = UDim2.new(width, xScale or 0, 0, CTRL_H), Position = UDim2.new(xScale and 0.5 or 0, xOffset or 0, 0, 0), Text = "", AutoButtonColor = false, ZIndex = 5, Parent = parent })
 	Library:AddToRegistry(b, { BackgroundColor3 = "Element" }); Corner(b, 10); Stroke(b, cfg.Risky and "Risky" or "Outline")
@@ -792,7 +770,6 @@ function GroupboxMethods:AddButton(cfg, func)
 	return obj
 end
 
--- toggle ---------------------------------------------------------------------
 function GroupboxMethods:AddToggle(idx, cfg)
 	cfg = cfg or {}
 	local f = row(self, ROW_H)
@@ -837,7 +814,6 @@ function GroupboxMethods:AddToggle(idx, cfg)
 	return obj
 end
 
--- slider ---------------------------------------------------------------------
 function GroupboxMethods:AddSlider(idx, cfg)
 	cfg = cfg or {}
 	local f = row(self, LINE_H + 14)
@@ -893,7 +869,6 @@ function GroupboxMethods:AddSlider(idx, cfg)
 	return obj
 end
 
--- input ----------------------------------------------------------------------
 function GroupboxMethods:AddInput(idx, cfg)
 	cfg = cfg or {}
 	local f = row(self, LINE_H + CTRL_H + 4)
@@ -919,7 +894,6 @@ function GroupboxMethods:AddInput(idx, cfg)
 	return obj
 end
 
--- dropdown -------------------------------------------------------------------
 function GroupboxMethods:AddDropdown(idx, cfg)
 	cfg = cfg or {}
 	local f = row(self, LINE_H + CTRL_H + 4)
@@ -1043,7 +1017,6 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	return obj
 end
 
--- colour picker ---------------------------------------------------------------
 local function toHex(c) return string.format("#%02X%02X%02X", math.floor(c.R * 255 + 0.5), math.floor(c.G * 255 + 0.5), math.floor(c.B * 255 + 0.5)) end
 local function fromHex(s)
 	s = tostring(s):gsub("#", "")
@@ -1077,7 +1050,6 @@ function Library._AttachColorPicker(parentObj, parentFrame, idx, cfg)
 
 	local title = Text(pop, cfg.Title or cfg.Text or idx, 12, true); title.LayoutOrder = 0; title.Size = UDim2.new(1, 0, 0, LINE_H); title.ZIndex = 71
 
-	-- saturation / value field built from gradients (no image assets to fail)
 	local sv = Create("Frame", { Size = UDim2.new(1, 0, 0, 118), LayoutOrder = 1, BackgroundColor3 = Color3.fromRGB(255, 0, 0), ZIndex = 71, Parent = pop })
 	Corner(sv, 8)
 	local satLayer = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 72, Parent = sv })
@@ -1233,7 +1205,6 @@ function GroupboxMethods:AddColorPicker(idx, cfg)
 	return obj
 end
 
--- key picker ------------------------------------------------------------------
 local KEY_SHORT = { MouseButton1 = "M1", MouseButton2 = "M2", MouseButton3 = "M3" }
 local function keyName(k)
 	if typeof(k) == "EnumItem" then
@@ -1358,7 +1329,6 @@ function GroupboxMethods:AddKeyPicker(idx, cfg)
 	return obj
 end
 
-
 function GroupboxMethods:AddESPPreview(cfg)
 	cfg = cfg or {}
 	local tabsCfg = cfg.Tabs or { "Enemy", "Team" }
@@ -1457,7 +1427,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 		local box = Create("Frame", { Size = UDim2.new(0, 64, 0, 132), Position = UDim2.new(0.5, -32, 0.5, -66), BackgroundTransparency = 1, ZIndex = 8, Parent = page })
 		box.AnchorPoint = Vector2.new(0.5, 0.5)
 		local boxStroke = Create("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 1, Parent = box })
-		-- same card the in-game ESP draws: Code font, hard black stroke, name over "[dist] hp/max", flat bar under it
+
 		local nameL = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 160, 0, 14), Position = UDim2.new(0.5, 0, 0.5, -80), BackgroundTransparency = 1, Text = "player", TextSize = 13, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(255, 255, 255), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, ZIndex = 9, Parent = page })
 		local distL = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 160, 0, 12), Position = UDim2.new(0.5, 0, 0.5, -66), BackgroundTransparency = 1, Text = "[42] 180/250", TextSize = 11, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(220, 220, 220), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, ZIndex = 9, Parent = page })
 		local weapon = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.new(0, 160, 0, 12), Position = UDim2.new(0.5, 0, 0.5, 74), BackgroundTransparency = 1, Text = "weapon", TextSize = 11, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(220, 220, 220), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, ZIndex = 9, Parent = page })
@@ -1505,7 +1475,6 @@ function GroupboxMethods:AddESPPreview(cfg)
 	return preview
 end
 
--- ================================================================ unload
 Library._onUnload = {}
 function Library:OnUnload(fn) table.insert(self._onUnload, fn) end
 function Library:Unload()
