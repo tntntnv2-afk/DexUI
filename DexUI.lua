@@ -21,17 +21,17 @@ local Library = {
 	Unloaded = false,
 	IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled,
 	Theme = {
-		Background = Color3.fromRGB(10, 10, 11),
-		Main = Color3.fromRGB(15, 15, 17),
-		Element = Color3.fromRGB(22, 22, 25),
-		ElementHover = Color3.fromRGB(30, 30, 34),
-		Accent = Color3.fromRGB(200, 30, 30),
-		AccentGradient = ColorSequence.new(Color3.fromRGB(235, 45, 45), Color3.fromRGB(110, 8, 8)),
-		Outline = Color3.fromRGB(36, 36, 40),
-		OutlineStrong = Color3.fromRGB(70, 18, 18),
-		Font = Color3.fromRGB(230, 230, 232),
-		FontDim = Color3.fromRGB(128, 128, 136),
-		Risky = Color3.fromRGB(255, 80, 80),
+		Background = Color3.fromRGB(8, 8, 9),
+		Main = Color3.fromRGB(14, 14, 16),
+		Element = Color3.fromRGB(24, 24, 27),
+		ElementHover = Color3.fromRGB(34, 34, 38),
+		Accent = Color3.fromRGB(214, 40, 48),
+		AccentGradient = ColorSequence.new(Color3.fromRGB(243, 62, 70), Color3.fromRGB(128, 14, 20)),
+		Outline = Color3.fromRGB(32, 32, 36),
+		OutlineStrong = Color3.fromRGB(58, 20, 24),
+		Font = Color3.fromRGB(238, 238, 241),
+		FontDim = Color3.fromRGB(122, 122, 132),
+		Risky = Color3.fromRGB(255, 92, 92),
 	},
 	FontFace = Font.new("rbxasset://fonts/families/Montserrat.json", Enum.FontWeight.Medium),
 	FontFaceBold = Font.new("rbxasset://fonts/families/Montserrat.json", Enum.FontWeight.Bold),
@@ -279,24 +279,37 @@ function Library:SetNotifySide(side)
 end
 function Library:Notify(opts, duration)
 	if type(opts) ~= "table" then opts = { Description = tostring(opts), Time = duration } end
+	local title = opts.Title or "dexori"
+	local desc = opts.Description or ""
 	local time = opts.Time or 4
-	local card = Create("Frame", { Size = UDim2.new(0, 270, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 0.1, ClipsDescendants = true, Parent = NotifHolder })
-	self:AddToRegistry(card, { BackgroundColor3 = "Main" }); Corner(card, 10); Library.Glass(card); Library.Shadow(card, 16)
-	local bar = Create("Frame", { Size = UDim2.new(0, 2, 1, 0), BorderSizePixel = 0, Parent = card })
+	local W = 260
+	local card = Create("Frame", { Size = UDim2.fromOffset(W, 44), BackgroundTransparency = 0.04, ClipsDescendants = true, Parent = NotifHolder })
+	self:AddToRegistry(card, { BackgroundColor3 = "Main" })
+	Corner(card, 10); Stroke(card, "Outline"); Shadow(card, 12)
+	local bar = Create("Frame", { Size = UDim2.new(0, 2, 1, -12), Position = UDim2.new(0, 8, 0, 6), BorderSizePixel = 0, ZIndex = 2, Parent = card })
+	Corner(bar, 1)
 	Create("UIGradient", { Rotation = 90, Parent = bar })
 	self:AddToRegistry(bar.UIGradient, { Color = "AccentGradient" })
-	local inner = Create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, -16, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.new(0, 10, 0, 0), Parent = card })
-	Pad(inner, 0, 0, 7, 7)
-	Create("UIListLayout", { Padding = UDim.new(0, 1), SortOrder = Enum.SortOrder.LayoutOrder, Parent = inner })
-	local t = Text(inner, opts.Title or "dexori", 12, true); t.LayoutOrder = 1; t.Size = UDim2.new(1, 0, 0, 14)
-	local d = Text(inner, opts.Description or "", 11, false, "FontDim"); d.LayoutOrder = 2; d.TextWrapped = true; d.AutomaticSize = Enum.AutomaticSize.Y; d.Size = UDim2.new(1, 0, 0, 0); d.TextTruncate = Enum.TextTruncate.None
-	local prog = Create("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), BorderSizePixel = 0, Parent = card })
+	local t = Text(card, title, 12, true); t.Position = UDim2.new(0, 18, 0, 7); t.Size = UDim2.new(1, -28, 0, 14); t.ZIndex = 2
+	local d = Text(card, desc, 11, false, "FontDim")
+	d.Position = UDim2.new(0, 18, 0, 22); d.Size = UDim2.new(1, -28, 0, 28); d.TextWrapped = true
+	d.TextYAlignment = Enum.TextYAlignment.Top; d.TextTruncate = Enum.TextTruncate.AtEnd; d.ZIndex = 2
+	task.defer(function()
+		local lines = math.clamp(math.ceil(d.TextBounds.Y / 13), 1, 3)
+		local h = 26 + lines * 13
+		card.Size = UDim2.fromOffset(W, h)
+		d.Size = UDim2.new(1, -28, 0, lines * 13)
+	end)
+	local prog = Create("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 1, -1), BorderSizePixel = 0, ZIndex = 3, Parent = card })
 	self:AddToRegistry(prog, { BackgroundColor3 = "Accent" })
-	card.Position = UDim2.new(1, 280, 0, 0)
-	Tween(card, { Position = UDim2.new(0, 0, 0, 0) }, 0.22)
+	card.Position = UDim2.new(1, W + 20, 0, 0)
+	Tween(card, { Position = UDim2.new(0, 0, 0, 0) }, 0.24, Enum.EasingStyle.Quint)
 	Tween(prog, { Size = UDim2.new(0, 0, 0, 1) }, time, Enum.EasingStyle.Linear)
 	local obj = { Frame = card }
-	function obj:Destroy() if card.Parent then Tween(card, { Position = UDim2.new(1, 280, 0, 0) }, 0.18).Completed:Connect(function() card:Destroy() end) end end
+	function obj:Destroy()
+		if not card.Parent then return end
+		Tween(card, { Position = UDim2.new(1, W + 20, 0, 0) }, 0.18).Completed:Connect(function() card:Destroy() end)
+	end
 	task.delay(time, function() obj:Destroy() end)
 	card.InputBegan:Connect(function(inp) if IsPressed(inp) then obj:Destroy() end end)
 	return obj
@@ -383,7 +396,7 @@ function Library:CreateWindow(cfg)
 
 	local main = Create("Frame", { Name = "Window", Size = size, Position = UDim2.new(0.5, -size.X.Offset / 2, 0.5, -size.Y.Offset / 2), ClipsDescendants = true, ZIndex = 10, Parent = ScreenGui })
 	self:AddToRegistry(main, { BackgroundColor3 = "Background" })
-	Corner(main, 14)
+	Corner(main, 16)
 	Create("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(226, 226, 232)), Parent = main })
 	local edge = Create("UIStroke", { Thickness = 1, Transparency = 0.5, Color = Color3.fromRGB(255, 255, 255), Parent = main })
 	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(1, 0.92) }), Parent = edge })
@@ -392,6 +405,9 @@ function Library:CreateWindow(cfg)
 
 	local rail = Create("Frame", { Name = "Rail", Size = UDim2.new(0, 68, 1, 0), BorderSizePixel = 0, ZIndex = 11, Parent = main })
 	self:AddToRegistry(rail, { BackgroundColor3 = "Main" })
+	Corner(rail, 16)
+	local railPatch = Create("Frame", { Size = UDim2.new(0, 16, 1, 0), Position = UDim2.new(1, -16, 0, 0), BorderSizePixel = 0, ZIndex = 11, Parent = rail })
+	self:AddToRegistry(railPatch, { BackgroundColor3 = "Main" })
 	local railEdge = Create("Frame", { Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(1, -1, 0, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 12, Parent = rail })
 	self:AddToRegistry(railEdge, { BackgroundColor3 = "Outline" })
 	local logoRing = Create("Frame", { Size = UDim2.fromOffset(42, 42), Position = UDim2.new(0.5, -21, 0, 14), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
@@ -410,10 +426,9 @@ function Library:CreateWindow(cfg)
 	local railList = Create("Frame", { Size = UDim2.new(1, 0, 1, -140), Position = UDim2.new(0, 0, 0, 68), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
 	Create("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = railList })
 
-	local pill = Create("Frame", { Size = UDim2.fromOffset(3, 24), Position = UDim2.new(0, 0, 0, 80), AnchorPoint = Vector2.new(0, 0.5), ZIndex = 14, Parent = rail })
+	local pill = Create("Frame", { Size = UDim2.fromOffset(3, 20), Position = UDim2.new(0, 0, 0, 80), AnchorPoint = Vector2.new(0, 0.5), ZIndex = 14, Parent = rail })
 	self:AddToRegistry(pill, { BackgroundColor3 = "Accent" }); Corner(pill, 2)
-	local pillGlow = Create("ImageLabel", { Size = UDim2.fromOffset(52, 52), Position = UDim2.new(0, -16, 0.5, -26), BackgroundTransparency = 1, Image = "rbxassetid://5028857084", ImageTransparency = 0.6, ZIndex = 13, Parent = pill })
-	self:AddToRegistry(pillGlow, { ImageColor3 = "Accent" })
+
 
 	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(50, 24), Position = UDim2.new(0.5, 0, 1, -12), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
 	Corner(hintBtn, 8); self:AddToRegistry(hintBtn, { BackgroundColor3 = "Element" }); Stroke(hintBtn, "Outline")
@@ -595,11 +610,11 @@ function Library:CreateWindow(cfg)
 		function tab:Select()
 			for _, t in ipairs(window.Tabs) do
 				t.Page.Visible = false
-				t._btn.BackgroundTransparency = 1
+				Tween(t._btn, { BackgroundTransparency = 1 }, 0.12)
 				if t._glyph:IsA("ImageLabel") then Tween(t._glyph, { ImageColor3 = Library.Theme.FontDim }, 0.12) else Tween(t._glyph, { TextColor3 = Library.Theme.FontDim }, 0.12) end
 			end
 			self.Page.Visible = true
-			self._btn.BackgroundTransparency = 0
+			Tween(self._btn, { BackgroundTransparency = 0 }, 0.12)
 			if self._glyph:IsA("ImageLabel") then Tween(self._glyph, { ImageColor3 = Library.Theme.Accent }, 0.12) else Tween(self._glyph, { TextColor3 = Library.Theme.Accent }, 0.12) end
 			pageTitle.Text = name
 			task.defer(function() Tween(titleBar, { Size = UDim2.fromOffset(math.clamp(pageTitle.TextBounds.X, 20, 140), 3) }, 0.28, Enum.EasingStyle.Quint) end)
@@ -669,12 +684,10 @@ function Library:CreateWindow(cfg)
 		local gb = { Name = name, Path = path .. " / " .. name }
 		local card = Create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = gbOrder, ZIndex = 12, Parent = column })
 		Library:AddToRegistry(card, { BackgroundColor3 = "Main" }); Corner(card, 14); Stroke(card, "Outline")
-		local lip = Create("Frame", { Size = UDim2.new(1, -30, 0, 1), Position = UDim2.new(0, 15, 0, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.9, BorderSizePixel = 0, ZIndex = 13, Parent = card })
-		local head2 = Create("Frame", { Size = UDim2.new(1, 0, 0, 40), BackgroundTransparency = 1, ZIndex = 13, Parent = card })
-		local mark = Create("Frame", { Size = UDim2.fromOffset(4, 16), Position = UDim2.new(0, 15, 0.5, -8), ZIndex = 14, Parent = head2 })
-		Library:AddToRegistry(mark, { BackgroundColor3 = "Accent" }); Corner(mark, 2)
-		Create("UIGradient", { Rotation = 90, Parent = mark }); Library:AddToRegistry(mark.UIGradient, { Color = "AccentGradient" })
-		local t = Text(head2, string.upper(name), 11, true); t.Position = UDim2.new(0, 28, 0, 0); t.Size = UDim2.new(1, -44, 1, 0); t.ZIndex = 14
+		local head2 = Create("Frame", { Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, ZIndex = 13, Parent = card })
+		local t = Text(head2, name, 12, true); t.Position = UDim2.new(0, 16, 0, 0); t.Size = UDim2.new(1, -32, 1, 0); t.ZIndex = 14
+		local rule = Create("Frame", { Size = UDim2.new(1, -32, 0, 1), Position = UDim2.new(0, 16, 0, 37), BackgroundTransparency = 0.55, BorderSizePixel = 0, ZIndex = 13, Parent = card })
+		Library:AddToRegistry(rule, { BackgroundColor3 = "Outline" })
 		local holder = Create("Frame", { Size = UDim2.new(1, -32, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.new(0, 16, 0, 40), BackgroundTransparency = 1, ZIndex = 13, Parent = card })
 		Pad(holder, 0, 0, 0, 14)
 		Create("UIListLayout", { Padding = UDim.new(0, 9), SortOrder = Enum.SortOrder.LayoutOrder, Parent = holder })
@@ -979,10 +992,13 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 				local ib = Create("TextButton", { Size = UDim2.new(1, 0, 0, 28), Text = "", AutoButtonColor = false, BackgroundTransparency = selected and 0 or 1, LayoutOrder = i, ZIndex = 62, Parent = scroll })
 				Library:AddToRegistry(ib, { BackgroundColor3 = "Element" })
 				Corner(ib, 8)
-				local tick = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(3, 12), Position = UDim2.new(0, 8, 0.5, 0), BorderSizePixel = 0, Visible = selected, ZIndex = 63, Parent = ib })
-				Corner(tick, 2); Library:AddToRegistry(tick, { BackgroundColor3 = "Accent" })
+				local dot = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(14, 14), Position = UDim2.new(0, 8, 0.5, 0), BackgroundTransparency = selected and 0 or 1, ZIndex = 63, Parent = ib })
+				Corner(dot, obj.Multi and 4 or 7)
+				Library:AddToRegistry(dot, { BackgroundColor3 = "Accent" })
+				local dotEdge = Create("UIStroke", { Thickness = 1, Transparency = selected and 1 or 0.35, Parent = dot })
+				Library:AddToRegistry(dotEdge, { Color = "Outline" })
 				local il = Text(ib, tostring(v), 12, selected, selected and "Font" or "FontDim")
-				il.AnchorPoint = Vector2.new(0, 0.5); il.Position = UDim2.new(0, 18, 0.5, 0); il.Size = UDim2.new(1, -28, 0, LINE_H); il.ZIndex = 63
+				il.AnchorPoint = Vector2.new(0, 0.5); il.Position = UDim2.new(0, 30, 0.5, 0); il.Size = UDim2.new(1, -40, 0, LINE_H); il.ZIndex = 63
 				ib.MouseEnter:Connect(function() if not selected then ib.BackgroundTransparency = 0.4 end end)
 				ib.MouseLeave:Connect(function() if not selected then ib.BackgroundTransparency = 1 end end)
 				ib.MouseButton1Click:Connect(function()
@@ -1387,6 +1403,35 @@ function GroupboxMethods:AddESPPreview(cfg)
 			dist = math.clamp(dist - inp.Position.Z * 1.2, 3.5, 22)
 		end
 	end)
+	local popBtn = Create("TextButton", { Size = UDim2.fromOffset(24, 24), Position = UDim2.new(1, -32, 0, 8), Text = "", AutoButtonColor = false, ZIndex = 13, Parent = canvas })
+	Corner(popBtn, 8); Library:AddToRegistry(popBtn, { BackgroundColor3 = "Element" }); Stroke(popBtn, "Outline")
+	do
+		local a = Create("Frame", { Size = UDim2.fromOffset(9, 7), Position = UDim2.new(0.5, -6, 0.5, -5), BackgroundTransparency = 1, ZIndex = 14, Parent = popBtn })
+		local s1 = Create("UIStroke", { Thickness = 1, Parent = a }); Library:AddToRegistry(s1, { Color = "FontDim" })
+		local b = Create("Frame", { Size = UDim2.fromOffset(9, 7), Position = UDim2.new(0.5, -2, 0.5, -1), BackgroundTransparency = 1, ZIndex = 15, Parent = popBtn })
+		local s2 = Create("UIStroke", { Thickness = 1, Parent = b }); Library:AddToRegistry(s2, { Color = "Accent" })
+	end
+	local floating = nil
+	popBtn.MouseButton1Click:Connect(function()
+		if floating then
+			canvas.Parent = f
+			canvas.Position = UDim2.new(0, 0, 0, 24)
+			canvas.Size = UDim2.new(1, 0, 0, 190)
+			floating:Destroy()
+			floating = nil
+			return
+		end
+		local win = Create("Frame", { Size = UDim2.fromOffset(360, 320), Position = UDim2.new(0.5, -180, 0.5, -160), ZIndex = 400, Parent = PopupLayer })
+		Library:AddToRegistry(win, { BackgroundColor3 = "Main" })
+		Corner(win, 14); Stroke(win, "OutlineStrong"); Shadow(win, 20)
+		local bar = Create("TextButton", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 401, Parent = win })
+		local tl = Text(bar, "esp preview", 12, true); tl.Position = UDim2.new(0, 12, 0, 0); tl.Size = UDim2.new(1, -40, 1, 0); tl.ZIndex = 402
+		Draggable(bar, win)
+		canvas.Parent = win
+		canvas.Position = UDim2.new(0, 10, 0, 34)
+		canvas.Size = UDim2.new(1, -20, 1, -44)
+		floating = win
+	end)
 	local zoomBox = Create("Frame", { Size = UDim2.fromOffset(26, 52), Position = UDim2.new(1, -34, 1, -60), BackgroundTransparency = 1, ZIndex = 12, Parent = canvas })
 	Create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = zoomBox })
 	for i, spec in ipairs({ { "+", -2 }, { "-", 2 } }) do
@@ -1488,6 +1533,22 @@ function GroupboxMethods:AddESPPreview(cfg)
 		end
 		tb.MouseButton1Click:Connect(function() tab:Select() end)
 		table.insert(preview.Tabs, tab)
+	end
+	function preview:SetChams(on, colour, transparency)
+		for _, d in ipairs(dummy:GetDescendants()) do
+			if d:IsA("BasePart") then
+				if on then
+					d.Color = colour or Color3.fromRGB(214, 40, 48)
+					d.Material = Enum.Material.Neon
+					d.Transparency = transparency or 0
+				else
+					d.Material = Enum.Material.SmoothPlastic
+					d.Transparency = 0
+				end
+			elseif d:IsA("Decal") or d:IsA("Texture") then
+				d.Transparency = on and 1 or 0
+			end
+		end
 	end
 	function preview:GetTab(name) for _, t in ipairs(self.Tabs) do if t.Name == name then return t end end end
 	function preview:Set(name, settings) local t = self:GetTab(name) if t then t:Set(settings) end end
