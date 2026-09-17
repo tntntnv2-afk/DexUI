@@ -1773,7 +1773,7 @@ end
 function GroupboxMethods:AddESPPreview(cfg)
 	cfg = cfg or {}
 	local tabsCfg = cfg.Tabs or { "Enemy", "Team" }
-	local CANVAS_H = cfg.Height or 232
+	local CANVAS_H = cfg.Height or 250
 	local f = row(self, CANVAS_H + 26, true)
 
 	-- segmented tabs
@@ -1802,28 +1802,23 @@ function GroupboxMethods:AddESPPreview(cfg)
 
 	-- ---------------------------------------------------------------- figure (2D, crisp)
 	-- all geometry in a 64 x 140 body box centred in the canvas; joint map is exact, so overlays never drift
-	local BW, BH = 64, 140
+	-- the figure is the player's real avatar render; the body box is calibrated to where the character sits in that render
+	local IMG = 190
+	local BW, BH = 76, 158
 	local body = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(BW, BH), Position = UDim2.new(0.5, 0, 0.5, 6), BackgroundTransparency = 1, ZIndex = 6, Parent = canvas })
-	local skin = Color3.fromRGB(34, 34, 38)
-	local function limb(w, h, x, y, r)
-		local l = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(w, h), Position = UDim2.fromOffset(x, y), BackgroundColor3 = skin, BorderSizePixel = 0, ZIndex = 6, Parent = body })
-		Corner(l, r or 4)
-		local s = Create("UIStroke", { Thickness = 1, Transparency = 0.55, Parent = l })
-		Library:AddToRegistry(s, { Color = "Outline" })
-		return l
+	local avatar = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(IMG, IMG), Position = UDim2.new(0.5, 0, 0.5, 2), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, ZIndex = 6, Parent = body })
+	local function setUser(userId)
+		avatar.Image = string.format("rbxthumb://type=AvatarThumbnail&id=%d&w=420&h=420", tonumber(userId) or LocalPlayer.UserId)
 	end
-	limb(22, 22, 32, 0, 11)          -- head
-	limb(30, 46, 32, 26, 6)          -- torso
-	limb(10, 42, 12, 27, 5)          -- left arm
-	limb(10, 42, 52, 27, 5)          -- right arm
-	limb(13, 62, 24, 74, 5)          -- left leg
-	limb(13, 62, 40, 74, 5)          -- right leg
+	setUser(cfg.UserId or LocalPlayer.UserId)
+	-- joints as proportions of the body box (typical R15 full-body render)
+	local function J(x, y) return Vector2.new(BW * x, BH * y) end
 	local joints = {
-		head = Vector2.new(32, 11), neck = Vector2.new(32, 24), chest = Vector2.new(32, 40), hip = Vector2.new(32, 72),
-		lsh = Vector2.new(17, 30), lel = Vector2.new(13, 50), lha = Vector2.new(12, 69),
-		rsh = Vector2.new(47, 30), rel = Vector2.new(51, 50), rha = Vector2.new(52, 69),
-		lhp = Vector2.new(25, 76), lkn = Vector2.new(24, 106), lft = Vector2.new(24, 134),
-		rhp = Vector2.new(39, 76), rkn = Vector2.new(40, 106), rft = Vector2.new(40, 134),
+		head = J(0.5, 0.09), neck = J(0.5, 0.18), chest = J(0.5, 0.3), hip = J(0.5, 0.52),
+		lsh = J(0.3, 0.22), lel = J(0.24, 0.37), lha = J(0.2, 0.5),
+		rsh = J(0.7, 0.22), rel = J(0.76, 0.37), rha = J(0.8, 0.5),
+		lhp = J(0.4, 0.55), lkn = J(0.39, 0.76), lft = J(0.38, 0.96),
+		rhp = J(0.6, 0.55), rkn = J(0.61, 0.76), rft = J(0.62, 0.96),
 	}
 	local bones = { { "head", "neck" }, { "neck", "chest" }, { "chest", "hip" }, { "neck", "lsh" }, { "lsh", "lel" }, { "lel", "lha" }, { "neck", "rsh" }, { "rsh", "rel" }, { "rel", "rha" }, { "hip", "lhp" }, { "lhp", "lkn" }, { "lkn", "lft" }, { "hip", "rhp" }, { "rhp", "rkn" }, { "rkn", "rft" } }
 
@@ -2012,6 +2007,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 
 	function preview:GetTab(name) for _, t in ipairs(self.Tabs) do if t.Name == name then return t end end end
 	function preview:Set(name, settings) local t = self:GetTab(name) if t then t:Set(settings) end end
+	function preview:SetUser(userId) setUser(userId) end
 	if preview.Tabs[1] then preview.Tabs[1]:Select() end
 	return preview
 end
@@ -2146,6 +2142,22 @@ do
 		Tween(veil, { BackgroundTransparency = 1 }, 0.12).Completed:Connect(function() if not open then veil.Visible = false end end)
 	end
 	function Library:TogglePalette() if open then self:_PaletteClose() else self:_PaletteOpen() end end
+
+	local launcher = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(0, 0, 0, 30), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(0, 16, 1, -16), BackgroundTransparency = 0.06, AutoButtonColor = false, Text = "", ZIndex = 300, Parent = ScreenGui })
+	Library:AddToRegistry(launcher, { BackgroundColor3 = "Main" }); Corner(launcher, 9)
+	local lst = Create("UIStroke", { Thickness = 1, Transparency = 0.15, Parent = launcher }); Library:AddToRegistry(lst, { Color = "Outline" })
+	local ledge = Create("UIStroke", { Thickness = 1, Transparency = 0.6, Parent = launcher }); Library:AddToRegistry(ledge, { Color = "Accent" })
+	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.3, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = ledge })
+	Pad(launcher, 10, 12, 0, 0)
+	Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = launcher })
+	local licon = SearchIcon(launcher, 13, "Accent"); licon.LayoutOrder = 1; licon.ZIndex = 301
+	local ltext = Text(launcher, "commands", 11, true); ltext.LayoutOrder = 2; ltext.AutomaticSize = Enum.AutomaticSize.X; ltext.Size = UDim2.new(0, 0, 1, 0); ltext.ZIndex = 301
+	local lkey = Create("Frame", { LayoutOrder = 3, Size = UDim2.new(0, 0, 0, 18), AutomaticSize = Enum.AutomaticSize.X, ZIndex = 301, Parent = launcher })
+	Library:AddToRegistry(lkey, { BackgroundColor3 = "Element" }); Corner(lkey, 5); Stroke(lkey, "Outline"); Pad(lkey, 6, 6, 0, 0)
+	local lkt = Text(lkey, "ctrl k", 10, true, "FontDim"); lkt.AutomaticSize = Enum.AutomaticSize.X; lkt.Size = UDim2.new(0, 0, 1, 0); lkt.ZIndex = 302
+	Hover(launcher, "Main", "ElementHover"); Ripple(launcher); Press(launcher, 0.96)
+	launcher.MouseButton1Click:Connect(function() Library:TogglePalette() end)
+	function Library:SetPaletteButtonVisible(on) launcher.Visible = on and true or false end
 
 	input:GetPropertyChangedSignal("Text"):Connect(function() if open then search(input.Text) end end)
 	veil.MouseButton1Click:Connect(function() Library:_PaletteClose() end)
