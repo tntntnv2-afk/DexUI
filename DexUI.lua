@@ -21,15 +21,15 @@ local Library = {
 	Unloaded = false,
 	IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled,
 	Theme = {
-		Background = Color3.fromRGB(10, 10, 11),
+		Background = Color3.fromRGB(0, 0, 0),
 		Well = Color3.fromRGB(0, 0, 0),
-		Main = Color3.fromRGB(14, 14, 16),
-		Element = Color3.fromRGB(24, 24, 27),
-		ElementHover = Color3.fromRGB(33, 33, 37),
+		Main = Color3.fromRGB(0, 0, 0),
+		Element = Color3.fromRGB(0, 0, 0),
+		ElementHover = Color3.fromRGB(13, 13, 15),
 		Accent = Color3.fromRGB(214, 40, 48),
 		AccentGradient = ColorSequence.new(Color3.fromRGB(243, 62, 70), Color3.fromRGB(128, 14, 20)),
-		Outline = Color3.fromRGB(32, 32, 36),
-		OutlineStrong = Color3.fromRGB(58, 20, 24),
+		Outline = Color3.fromRGB(38, 38, 42),
+		OutlineStrong = Color3.fromRGB(72, 22, 26),
 		Font = Color3.fromRGB(238, 238, 241),
 		FontDim = Color3.fromRGB(122, 122, 132),
 		Risky = Color3.fromRGB(255, 92, 92),
@@ -236,8 +236,16 @@ local function Icon(parent, name, size, themeKey)
 	return root
 end
 local function Hover(btn, normalKey, hoverKey)
-	btn.MouseEnter:Connect(function() Tween(btn, { BackgroundColor3 = Library.Theme[hoverKey] }, 0.1) end)
-	btn.MouseLeave:Connect(function() Tween(btn, { BackgroundColor3 = Library.Theme[normalKey] }, 0.1) end)
+	btn.MouseEnter:Connect(function()
+		Tween(btn, { BackgroundColor3 = Library.Theme[hoverKey] }, 0.1)
+		local s = btn:FindFirstChildOfClass("UIStroke")
+		if s then Tween(s, { Color = Library.Theme.FontDim }, 0.12) end
+	end)
+	btn.MouseLeave:Connect(function()
+		Tween(btn, { BackgroundColor3 = Library.Theme[normalKey] }, 0.1)
+		local s = btn:FindFirstChildOfClass("UIStroke")
+		if s then local key = Library.Registry[s] and Library.Registry[s].Color or "Outline" Tween(s, { Color = Library.Theme[key] or Library.Theme.Outline }, 0.12) end
+	end)
 end
 
 local function Glass(frame)
@@ -555,17 +563,39 @@ function Library:CreateWindow(cfg)
 	end
 	window.Frame = main
 
-	-- subtle vignette so the black has depth instead of being flat
-	local vig = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 10, Parent = main })
-	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.55), NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(1, 0.65) }), Parent = vig })
-	vig.BackgroundTransparency = 0.6
+	-- aurora: slow drifting ember blobs behind everything; cards are glass over it
+	local aurora = Create("Frame", { Name = "Aurora", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 10, Parent = main })
+	local blobs = {}
+	for i, spec in ipairs({ { 520, 0.86, 0.15 }, { 380, 0.9, 0.55 }, { 300, 0.93, 0.85 } }) do
+		local b = Create("Frame", { Size = UDim2.fromOffset(spec[1], spec[1]), BackgroundTransparency = spec[2], BorderSizePixel = 0, ZIndex = 10, Parent = aurora })
+		Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = b })
+		self:AddToRegistry(b, { BackgroundColor3 = "Accent" })
+		Create("UIGradient", { Rotation = 35 + i * 40, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(0.5, 0.75), NumberSequenceKeypoint.new(1, 1) }), Parent = b })
+		blobs[i] = { f = b, phase = spec[3] * 6.28, speed = 0.08 + i * 0.03, r = spec[1] }
+	end
+	task.spawn(function()
+		local t = 0
+		while not Library.Unloaded and aurora.Parent do
+			local dt = task.wait(0.03)
+			t = t + dt
+			local W, H = main.AbsoluteSize.X, main.AbsoluteSize.Y
+			for i, b in ipairs(blobs) do
+				local a = t * b.speed + b.phase
+				local x = W * (0.5 + 0.42 * math.sin(a)) - b.r * 0.5
+				local y = H * (0.5 + 0.38 * math.cos(a * 0.8 + i)) - b.r * 0.5
+				b.f.Position = UDim2.fromOffset(x, y)
+			end
+		end
+	end)
 
 	-- ------------------------------------------------------------ rail
-	local rail = Create("Frame", { Name = "Rail", Size = UDim2.new(0, RAIL, 1, 0), BorderSizePixel = 0, ZIndex = 11, Parent = main })
+	local rail = Create("Frame", { Name = "Rail", Size = UDim2.new(0, RAIL, 1, 0), BackgroundTransparency = 0.2, BorderSizePixel = 0, ZIndex = 11, Parent = main })
 	self:AddToRegistry(rail, { BackgroundColor3 = "Main" })
 	Corner(rail, 20)
-	local railPatch = Create("Frame", { Size = UDim2.new(0, 20, 1, 0), Position = UDim2.new(1, -20, 0, 0), BorderSizePixel = 0, ZIndex = 11, Parent = rail })
+	local railPatch = Create("Frame", { Size = UDim2.new(0, 20, 1, 0), Position = UDim2.new(1, -20, 0, 0), BackgroundTransparency = 0.2, BorderSizePixel = 0, ZIndex = 11, Parent = rail })
 	self:AddToRegistry(railPatch, { BackgroundColor3 = "Main" })
+	local railLine = Create("Frame", { Size = UDim2.new(0, 1, 1, -40), Position = UDim2.new(1, -1, 0, 20), BackgroundTransparency = 0.55, BorderSizePixel = 0, ZIndex = 12, Parent = rail })
+	self:AddToRegistry(railLine, { BackgroundColor3 = "Outline" })
 	-- vertical brand watermark down the left edge
 	local spaced = {}
 	for c in string.gmatch(string.upper(cfg.Title or "dexori"), ".") do spaced[#spaced + 1] = c end
@@ -587,13 +617,9 @@ function Library:CreateWindow(cfg)
 	local railList = Create("Frame", { Size = UDim2.new(1, -36, 1, -130), Position = UDim2.new(0, 24, 0, 70), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
 	Create("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = railList })
 	local selFill = Create("Frame", { Size = UDim2.new(1, -36, 0, 32), Position = UDim2.new(0, 24, 0, 70), Visible = false, ZIndex = 11, Parent = rail })
-	self:AddToRegistry(selFill, { BackgroundColor3 = "Well" }); Corner(selFill, 9)
-	local selEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.6, Parent = selFill })
-	self:AddToRegistry(selEdge, { Color = "Accent" })
-	Create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0.8), NumberSequenceKeypoint.new(1, 1) }), Parent = selEdge })
-	local selGlow = Create("Frame", { Size = UDim2.new(0, 3, 0, 14), Position = UDim2.new(0, 0, 0.5, -7), BorderSizePixel = 0, ZIndex = 12, Parent = selFill })
-	Corner(selGlow, 2); self:AddToRegistry(selGlow, { BackgroundColor3 = "Accent" })
-	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 0.6) }), Parent = selGlow })
+	self:AddToRegistry(selFill, { BackgroundColor3 = "Main" }); Corner(selFill, 8)
+	local selEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.2, Parent = selFill })
+	self:AddToRegistry(selEdge, { Color = "Outline" })
 
 	-- rebindable menu key chip
 	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -36, 0, 26), Position = UDim2.new(0, 24, 1, -14), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
@@ -767,15 +793,11 @@ function Library:CreateWindow(cfg)
 	local order = 0
 	local function columns(parent, top)
 		-- the well: a slightly lifted panel the cards sit inside, with even gutters
-		local well = Create("Frame", { Name = "Well", Size = UDim2.new(1, -40, 1, -(top + 8)), Position = UDim2.new(0, 20, 0, top), ZIndex = 11, ClipsDescendants = true, Parent = parent })
-		Library:AddToRegistry(well, { BackgroundColor3 = "Well" })
-		Corner(well, 14)
-		local ws = Create("UIStroke", { Thickness = 1, Transparency = 0.35, Parent = well })
-		Library:AddToRegistry(ws, { Color = "Outline" })
+		local well = Create("Frame", { Name = "Well", Size = UDim2.new(1, -40, 1, -(top + 8)), Position = UDim2.new(0, 20, 0, top), BackgroundTransparency = 1, ZIndex = 11, ClipsDescendants = true, Parent = parent })
 		local scroller = Create("ScrollingFrame", { Name = "Scroll", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageTransparency = 0.75, ScrollingDirection = Enum.ScrollingDirection.Y, ScrollingEnabled = true, Active = true, ClipsDescendants = true, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ZIndex = 12, Parent = well })
 		Library:AddToRegistry(scroller, { ScrollBarImageColor3 = "FontDim" })
 		local GUT = 12
-		local inner = Create("Frame", { Size = UDim2.new(1, -GUT * 2, 0, 0), Position = UDim2.new(0, GUT, 0, GUT), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 12, Parent = scroller })
+		local inner = Create("Frame", { Size = UDim2.new(1, 0, 0, 0), Position = UDim2.new(0, 0, 0, 2), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 12, Parent = scroller })
 		Pad(inner, 0, 0, 0, GUT)
 		local function col(xs, xo)
 			local c = Create("Frame", { Size = UDim2.new(0.5, -(GUT / 2)), Position = UDim2.new(xs, xo, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 12, Parent = inner })
@@ -793,23 +815,30 @@ function Library:CreateWindow(cfg)
 		local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 14, Parent = slot })
 		Corner(btn, 9)
 		local glyph
-		if type(icon) == "number" or (type(icon) == "string" and string.sub(icon, 1, 3) == "rbx") then
-			glyph = Create("ImageLabel", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 10, 0.5, 0), BackgroundTransparency = 1, Image = (type(icon) == "number") and ("rbxassetid://" .. icon) or tostring(icon), ZIndex = 15, Parent = btn })
-			Library:AddToRegistry(glyph, { ImageColor3 = "FontDim" })
-		else
-			glyph = Icon(btn, icon or "grid", 16, "FontDim")
-			glyph.AnchorPoint = Vector2.new(0, 0.5)
-			glyph.Position = UDim2.new(0, 10, 0.5, 0)
-			glyph.ZIndex = 15
+		local useIcon = cfg.UseIcons == true and icon ~= nil
+		if useIcon then
+			if type(icon) == "number" or (type(icon) == "string" and string.sub(icon, 1, 3) == "rbx") then
+				glyph = Create("ImageLabel", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 10, 0.5, 0), BackgroundTransparency = 1, Image = (type(icon) == "number") and ("rbxassetid://" .. icon) or tostring(icon), ZIndex = 15, Parent = btn })
+				Library:AddToRegistry(glyph, { ImageColor3 = "FontDim" })
+			else
+				glyph = Icon(btn, icon, 16, "FontDim")
+				glyph.AnchorPoint = Vector2.new(0, 0.5)
+				glyph.Position = UDim2.new(0, 10, 0.5, 0)
+				glyph.ZIndex = 15
+			end
 		end
 		local lbl = Text(btn, name, 12, true, "FontDim")
-		lbl.AnchorPoint = Vector2.new(0, 0.5); lbl.Position = UDim2.new(0, 34, 0.5, 0); lbl.Size = UDim2.new(1, -40, 0, 16); lbl.ZIndex = 15
+		lbl.AnchorPoint = Vector2.new(0, 0.5); lbl.Position = UDim2.new(0, useIcon and 34 or 12, 0.5, 0); lbl.Size = UDim2.new(1, -(useIcon and 40 or 16), 0, 16); lbl.ZIndex = 15
+		local idx = Text(btn, string.format("%02d", order), 9, true, "FontDim")
+		idx.AnchorPoint = Vector2.new(1, 0.5); idx.TextXAlignment = Enum.TextXAlignment.Right
+		idx.Position = UDim2.new(1, -10, 0.5, 0); idx.Size = UDim2.new(0, 20, 0, 12); idx.TextTransparency = 0.5; idx.ZIndex = 15
+		tab._idx = idx
 		Press(btn, 0.97)
 		btn.MouseEnter:Connect(function() if window.ActiveTab ~= tab then Tween(lbl, { TextColor3 = Library.Theme.Font }, 0.1) end end)
 		btn.MouseLeave:Connect(function() if window.ActiveTab ~= tab then Tween(lbl, { TextColor3 = Library.Theme.FontDim }, 0.1) end end)
 		tab._btn, tab._glyph, tab._label, tab._slot = btn, glyph, lbl, slot
 
-		local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 11, Parent = body })
+		local page = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(1, 0, 1, 0), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 11, Parent = body })
 		tab.Page = page
 		local subRow = Create("Frame", { Size = UDim2.new(1, -56, 0, 30), Position = UDim2.new(0, 28, 0, 8), BackgroundTransparency = 1, Visible = false, ZIndex = 12, Parent = page })
 		Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = subRow })
@@ -830,11 +859,22 @@ function Library:CreateWindow(cfg)
 			for _, t in ipairs(window.Tabs) do
 				t.Page.Visible = false
 				Tween(t._label, { TextColor3 = Library.Theme.FontDim }, 0.12)
-				if t._glyph:IsA("ImageLabel") then Tween(t._glyph, { ImageColor3 = Library.Theme.FontDim }, 0.12) else SetIconKey(t._glyph, "FontDim") end
+				if t._idx then Tween(t._idx, { TextColor3 = Library.Theme.FontDim, TextTransparency = 0.5 }, 0.12) end
+				if t._glyph then
+					if t._glyph:IsA("ImageLabel") then Tween(t._glyph, { ImageColor3 = Library.Theme.FontDim }, 0.12) else SetIconKey(t._glyph, "FontDim") end
+				end
 			end
 			self.Page.Visible = true
+			do
+				local pageScale = self.Page:FindFirstChildOfClass("UIScale") or Create("UIScale", { Parent = self.Page })
+				pageScale.Scale = 0.985
+				Tween(pageScale, { Scale = 1 }, 0.22, Enum.EasingStyle.Quint)
+			end
 			Tween(self._label, { TextColor3 = Library.Theme.Font }, 0.12)
-			if self._glyph:IsA("ImageLabel") then Tween(self._glyph, { ImageColor3 = Library.Theme.Accent }, 0.12) else SetIconKey(self._glyph, "Accent") end
+			if self._idx then Tween(self._idx, { TextColor3 = Library.Theme.Accent, TextTransparency = 0 }, 0.12) end
+			if self._glyph then
+				if self._glyph:IsA("ImageLabel") then Tween(self._glyph, { ImageColor3 = Library.Theme.Accent }, 0.12) else SetIconKey(self._glyph, "Accent") end
+			end
 			pageTitle.Text = name
 			window.ActiveTab = self
 			task.defer(function()
@@ -853,7 +893,7 @@ function Library:CreateWindow(cfg)
 						local delay = 0.025 * math.min(i, 8)
 						task.delay(delay, function()
 							Tween(sc, { Scale = 1 }, 0.26, Enum.EasingStyle.Back)
-							Tween(card, { BackgroundTransparency = 0 }, 0.2)
+							Tween(card, { BackgroundTransparency = card:GetAttribute("BaseAlpha") or 0 }, 0.2)
 						end)
 					end
 				end
@@ -902,8 +942,9 @@ function Library:CreateWindow(cfg)
 	function window:_MakeGroupbox(column, name, path, tabRef, subRef)
 		gbOrder = gbOrder + 1
 		local gb = { Name = name, Path = path .. " / " .. name }
-		local card = Create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = gbOrder, ZIndex = 12, Parent = column })
-		Library:AddToRegistry(card, { BackgroundColor3 = "Main" }); Corner(card, 10)
+		local card = Create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 0.35, LayoutOrder = gbOrder, ZIndex = 12, Parent = column })
+		card:SetAttribute("BaseAlpha", 0.35)
+		Library:AddToRegistry(card, { BackgroundColor3 = "Main" }); Corner(card, 12)
 		local cs = Create("UIStroke", { Thickness = 1, Transparency = 0.25, Parent = card })
 		Library:AddToRegistry(cs, { Color = "Outline" })
 		-- light-catching top edge
@@ -975,13 +1016,45 @@ Library.GroupboxMethods = GroupboxMethods
 
 local ROW_H, LINE_H, CTRL_H = 28, 16, 30
 
+-- tooltip: appears above the cursor after a short hover, styled like a popup
+local TipFrame = Create("Frame", { Size = UDim2.new(0, 0, 0, 26), AutomaticSize = Enum.AutomaticSize.X, Visible = false, ZIndex = 900, Parent = PopupLayer })
+Library:AddToRegistry(TipFrame, { BackgroundColor3 = "Main" }); Corner(TipFrame, 7)
+local tipStroke = Create("UIStroke", { Thickness = 1, Transparency = 0.2, Parent = TipFrame }); Library:AddToRegistry(tipStroke, { Color = "Outline" })
+Pad(TipFrame, 9, 9, 0, 0)
+local TipText = Text(TipFrame, "", 11, false); TipText.AutomaticSize = Enum.AutomaticSize.X; TipText.Size = UDim2.new(0, 0, 1, 0); TipText.ZIndex = 901
+local tipToken = 0
+local function AttachTooltip(frame, text)
+	if not text or text == "" then return end
+	frame.MouseEnter:Connect(function()
+		tipToken = tipToken + 1
+		local my = tipToken
+		task.delay(0.45, function()
+			if my ~= tipToken then return end
+			TipText.Text = text
+			local pos = UserInputService:GetMouseLocation()
+			TipFrame.Position = UDim2.fromOffset(pos.X + 12, pos.Y - 34)
+			TipFrame.Visible = true
+			RaisePopup(TipFrame)
+		end)
+	end)
+	frame.MouseLeave:Connect(function() tipToken = tipToken + 1 TipFrame.Visible = false end)
+end
+Library.AttachTooltip = AttachTooltip
+
+local function Badge(parent, text)
+	local b = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.new(0, 0, 0, 14), AutomaticSize = Enum.AutomaticSize.X, ZIndex = 6, Parent = parent })
+	Library:AddToRegistry(b, { BackgroundColor3 = "Accent" }); Corner(b, 4); Pad(b, 5, 5, 0, 0)
+	local t = Text(b, string.lower(text), 9, true); t.TextColor3 = Color3.new(1, 1, 1); t.AutomaticSize = Enum.AutomaticSize.X; t.Size = UDim2.new(0, 0, 1, 0); t.ZIndex = 7
+	Library:RemoveFromRegistry(t)
+	return b
+end
+
 local function row(gb, h, plain)
 	local f = Create("Frame", { Size = UDim2.new(1, 0, 0, h or ROW_H), BackgroundTransparency = 1, LayoutOrder = gb:_next(), ZIndex = 4, Parent = gb.Holder })
 	if not plain then
-		local hover = Create("Frame", { Name = "_hover", Size = UDim2.new(1, 16, 1, 6), Position = UDim2.new(0, -8, 0, -3), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 3, Parent = f })
+		local hover = Create("Frame", { Name = "_hover", Size = UDim2.new(1, 16, 1, 6), Position = UDim2.new(0, -8, 0, -3), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 3, Parent = f })
 		Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = hover })
-		Library:AddToRegistry(hover, { BackgroundColor3 = "Element" })
-		f.MouseEnter:Connect(function() Tween(hover, { BackgroundTransparency = 0.55 }, 0.12) end)
+		f.MouseEnter:Connect(function() Tween(hover, { BackgroundTransparency = 0.965 }, 0.12) end)
 		f.MouseLeave:Connect(function() Tween(hover, { BackgroundTransparency = 1 }, 0.16) end)
 	end
 	return f
@@ -1031,19 +1104,22 @@ function GroupboxMethods:AddLabel(text, wrap)
 	return obj
 end
 
-function GroupboxMethods:AddDivider()
-	local f = row(self, 10, true)
+function GroupboxMethods:AddDivider(label)
+	local f = row(self, label and 18 or 10, true)
 	local line = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, 0.5, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 5, Parent = f })
 	Library:AddToRegistry(line, { BackgroundColor3 = "Outline" })
 	Create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }), Parent = line })
+	if label then
+		local cap = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(0, 0, 0, 16), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(0.5, 0, 0.5, 0), ZIndex = 6, Parent = f })
+		Library:AddToRegistry(cap, { BackgroundColor3 = "Main" }); Pad(cap, 8, 8, 0, 0)
+		local t = Text(cap, string.upper(label), 9, true, "FontDim"); t.AutomaticSize = Enum.AutomaticSize.X; t.Size = UDim2.new(0, 0, 1, 0); t.TextXAlignment = Enum.TextXAlignment.Center; t.ZIndex = 7
+	end
 	return { Frame = f }
 end
 
 local function makeButton(parent, cfg, width, xScale, xOffset)
 	local b = Create("TextButton", { Size = UDim2.new(width, xScale or 0, 0, CTRL_H), Position = UDim2.new(xScale and 0.5 or 0, xOffset or 0, 0, 0), Text = "", AutoButtonColor = false, ClipsDescendants = true, ZIndex = 5, Parent = parent })
 	Library:AddToRegistry(b, { BackgroundColor3 = "Element" }); Corner(b, 10); Stroke(b, cfg.Risky and "Risky" or "Outline")
-	Create("UIGradient", { Rotation = 90, Color = ColorSequence.new(Color3.fromRGB(255, 255, 255), Color3.fromRGB(214, 214, 220)), Parent = b })
-	local topLight = Create("Frame", { Size = UDim2.new(1, -16, 0, 1), Position = UDim2.new(0, 8, 0, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.9, BorderSizePixel = 0, ZIndex = 6, Parent = b })
 	local sweep = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 0.94, BorderSizePixel = 0, ZIndex = 6, Parent = b })
 	local sg = Create("UIGradient", { Offset = Vector2.new(-1, 0), Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.45, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(0.55, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = sweep })
 	b.MouseEnter:Connect(function()
@@ -1059,6 +1135,7 @@ function GroupboxMethods:AddButton(cfg, func)
 	if type(cfg) == "string" then cfg = { Text = cfg, Func = func } end
 	local f = row(self, CTRL_H, true)
 	local b, l = makeButton(f, cfg, 1)
+	AttachTooltip(b, cfg.Tooltip)
 	local obj, armed = { Frame = f, Button = b }, false
 	b.MouseButton1Click:Connect(function()
 		if cfg.DoubleClick then
@@ -1088,19 +1165,24 @@ function GroupboxMethods:AddToggle(idx, cfg)
 	Library:AddToRegistry(sw, { BackgroundColor3 = "Element" }); Corner(sw, 10); local bs = Stroke(sw, "Outline")
 	local fill = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 6, Parent = sw })
 	Corner(fill, 10); Library:AddToRegistry(fill, { BackgroundColor3 = "Accent" })
-	local knob = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 2, 0.5, 0), BackgroundColor3 = Color3.fromRGB(96, 96, 104), BorderSizePixel = 0, ZIndex = 7, Parent = sw })
+	local knob = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 2, 0.5, 0), BackgroundColor3 = Color3.fromRGB(70, 70, 78), BorderSizePixel = 0, ZIndex = 7, Parent = sw })
 	Corner(knob, 8)
 	local kglow = Create("UIStroke", { Thickness = 3, Transparency = 1, Parent = knob })
 	Library:AddToRegistry(kglow, { Color = "Accent" })
 	local l = Text(f, cfg.Text or idx, 12, false)
 	l.AnchorPoint = Vector2.new(0, 0.5); l.Position = UDim2.new(0, 46, 0.5, 0); l.Size = UDim2.new(1, -46, 0, LINE_H); l.ZIndex = 5
 	local fitLabel = function() bindLabelWidth(l, f, 46) end
+	if cfg.Badge then
+		local bd = Badge(f, cfg.Badge)
+		task.defer(function() bd.Position = UDim2.new(0, 46 + l.TextBounds.X + 8, 0.5, 0) end)
+	end
+	AttachTooltip(f, cfg.Tooltip)
 	local obj = { Frame = f, Value = cfg.Default and true or false, Type = "Toggle", Idx = idx, Callback = cfg.Callback, _changed = {} }
 	local function render(anim)
 		local on = obj.Value
 		local t = anim and 0.18 or 0
 		Tween(fill, { BackgroundTransparency = on and 0 or 1 }, t)
-		Tween(knob, { Position = on and UDim2.new(1, -18, 0.5, 0) or UDim2.new(0, 2, 0.5, 0), BackgroundColor3 = on and Color3.fromRGB(232, 232, 236) or Color3.fromRGB(96, 96, 104) }, t, Enum.EasingStyle.Quint)
+		Tween(knob, { Position = on and UDim2.new(1, -18, 0.5, 0) or UDim2.new(0, 2, 0.5, 0), BackgroundColor3 = on and Color3.fromRGB(232, 232, 236) or Color3.fromRGB(70, 70, 78) }, anim and 0.28 or 0, Enum.EasingStyle.Back)
 		Tween(kglow, { Transparency = on and 0.75 or 1 }, t)
 		bs.Color = on and Library.Theme.Accent or Library.Theme.Outline
 		Library.Registry[bs] = on and { Color = "Accent" } or { Color = "Outline" }
@@ -1132,12 +1214,13 @@ function GroupboxMethods:AddSlider(idx, cfg)
 	local f = row(self, LINE_H + 16)
 	local l = lineLabel(f, cfg.Text or idx, false)
 	l.Size = UDim2.new(1, -80, 0, LINE_H)
+	AttachTooltip(f, cfg.Tooltip)
 	local chip = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.new(0, 0, 0, 18), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(1, 0, 0, LINE_H / 2), ZIndex = 5, Parent = f })
 	Library:AddToRegistry(chip, { BackgroundColor3 = "Element" }); Corner(chip, 6); Stroke(chip, "Outline"); Pad(chip, 7, 7, 0, 0)
 	local val = Text(chip, "", 11, true)
 	val.AnchorPoint = Vector2.new(0, 0.5); val.Position = UDim2.new(0, 0, 0.5, 0); val.AutomaticSize = Enum.AutomaticSize.X; val.Size = UDim2.new(0, 0, 0, LINE_H); val.ZIndex = 6
 	local track = Create("Frame", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, 6), Position = UDim2.new(0, 0, 1, -2), ZIndex = 5, Parent = f })
-	Library:AddToRegistry(track, { BackgroundColor3 = "Element" }); Corner(track, 3)
+	Library:AddToRegistry(track, { BackgroundColor3 = "Element" }); Corner(track, 3); Stroke(track, "Outline")
 	local fill = Create("Frame", { Size = UDim2.new(0, 0, 1, 0), BorderSizePixel = 0, ZIndex = 6, Parent = track }); Corner(fill, 3)
 	Library:AddToRegistry(fill, { BackgroundColor3 = "Accent" })
 	local fglow = Create("UIStroke", { Thickness = 2, Transparency = 0.75, Parent = fill })
@@ -1174,12 +1257,13 @@ function GroupboxMethods:AddSlider(idx, cfg)
 		local a = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
 		obj:SetValue(min + (max - min) * a)
 	end
-	hit.InputBegan:Connect(function(inp) if IsPressed(inp) then dragging = true Tween(knob, { Size = UDim2.fromOffset(14, 14) }, 0.12, Enum.EasingStyle.Back) fromX(inp.Position.X) end end)
+	local chipScale = Create("UIScale", { Scale = 1, Parent = chip })
+	hit.InputBegan:Connect(function(inp) if IsPressed(inp) then dragging = true Tween(knob, { Size = UDim2.fromOffset(14, 14) }, 0.12, Enum.EasingStyle.Back) Tween(chipScale, { Scale = 1.12 }, 0.12, Enum.EasingStyle.Back) fromX(inp.Position.X) end end)
 	Library:GiveSignal(UserInputService.InputChanged:Connect(function(inp)
 		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then fromX(inp.Position.X) end
 	end))
 	Library:GiveSignal(UserInputService.InputEnded:Connect(function(inp)
-		if IsPressed(inp) and dragging then dragging = false Tween(knob, { Size = UDim2.fromOffset(10, 10) }, 0.14) end
+		if IsPressed(inp) and dragging then dragging = false Tween(knob, { Size = UDim2.fromOffset(10, 10) }, 0.14) Tween(chipScale, { Scale = 1 }, 0.16) end
 	end))
 	render()
 	Library.Options[idx] = obj
@@ -1868,7 +1952,7 @@ ThemeManager.Folder = "DexoriUI"
 ThemeManager.Library = nil
 ThemeManager.BuiltIn = {
 	["Frostbite"] = { Background = "070a10", Main = "0b0f17", Element = "111722", ElementHover = "18202e", Accent = "60b2ff", AccentGradient = { "96d6ff", "2260be", 0 }, Outline = "1c2636", OutlineStrong = "2e568c", Font = "e2ebf5", FontDim = "7889a0", Risky = "ff6060" },
-	["Dexori Red"] = { Background = "0a0a0b", Well = "000000", Main = "0e0e10", Element = "18181b", ElementHover = "212125", Accent = "d62830", AccentGradient = { "f33e46", "800e14", 0 }, Outline = "202024", OutlineStrong = "3a1418", Font = "e6e6e8", FontDim = "808088", Risky = "ff5050" },
+	["Dexori Red"] = { Background = "000000", Well = "000000", Main = "000000", Element = "000000", ElementHover = "0d0d0f", Accent = "d62830", AccentGradient = { "f33e46", "800e14", 0 }, Outline = "26262a", OutlineStrong = "48161a", Font = "e6e6e8", FontDim = "808088", Risky = "ff5050" },
 	["Nightshade"] = { Background = "0b0810", Main = "100c18", Element = "171124", ElementHover = "1f1830", Accent = "9b59ff", AccentGradient = { "c08cff", "5e2bd6", 0 }, Outline = "231a33", OutlineStrong = "42288c", Font = "ece6f8", FontDim = "8b7fa8", Risky = "ff6b6b" },
 	["Pine"] = { Background = "07100c", Main = "0b1712", Element = "10201a", ElementHover = "172c24", Accent = "34d399", AccentGradient = { "6ee7b7", "0f9268", 0 }, Outline = "173028", OutlineStrong = "1d6b4c", Font = "e4f3ec", FontDim = "76998a", Risky = "ff6b6b" },
 	["Carbon"] = { Background = "09090a", Main = "0e0e10", Element = "141416", ElementHover = "1c1c20", Accent = "d8d8dc", AccentGradient = { "ffffff", "8c8c94", 0 }, Outline = "1f1f23", OutlineStrong = "3a3a42", Font = "f2f2f4", FontDim = "83838c", Risky = "ff5050" },
