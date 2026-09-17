@@ -21,11 +21,11 @@ local Library = {
 	Unloaded = false,
 	IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled,
 	Theme = {
-		Background = Color3.fromRGB(9, 9, 10),
-		Well = Color3.fromRGB(14, 14, 16),
-		Main = Color3.fromRGB(0, 0, 0),
-		Element = Color3.fromRGB(19, 19, 22),
-		ElementHover = Color3.fromRGB(27, 27, 31),
+		Background = Color3.fromRGB(10, 10, 11),
+		Well = Color3.fromRGB(0, 0, 0),
+		Main = Color3.fromRGB(14, 14, 16),
+		Element = Color3.fromRGB(24, 24, 27),
+		ElementHover = Color3.fromRGB(33, 33, 37),
 		Accent = Color3.fromRGB(214, 40, 48),
 		AccentGradient = ColorSequence.new(Color3.fromRGB(243, 62, 70), Color3.fromRGB(128, 14, 20)),
 		Outline = Color3.fromRGB(32, 32, 36),
@@ -206,28 +206,31 @@ local function Icon(parent, name, size, themeKey)
 		return f
 	end
 
+	local k = size / 18
 	if name == "sliders" then
-		bar(14, 1.5, 0, -5) bar(4, 4, 3, -5, 0, 2)
-		bar(14, 1.5, 0, 0) bar(4, 4, -3, 0, 0, 2)
-		bar(14, 1.5, 0, 5) bar(4, 4, 2, 5, 0, 2)
+		bar(14 * k, 2, 0, -5 * k) bar(5 * k, 5 * k, 3 * k, -5 * k, 0, 3)
+		bar(14 * k, 2, 0, 0) bar(5 * k, 5 * k, -3 * k, 0, 0, 3)
+		bar(14 * k, 2, 0, 5 * k) bar(5 * k, 5 * k, 2 * k, 5 * k, 0, 3)
 	elseif name == "eye" then
-		ring(16, 10, 0, 0, 1.5) bar(5, 5, 0, 0, 0, 3)
+		ring(17 * k, 11 * k, 0, 0, 1.8) bar(5 * k, 5 * k, 0, 0, 0, 3)
 	elseif name == "gear" then
-		ring(11, 11, 0, 0, 1.5) bar(3, 3, 0, -7, 0, 1) bar(3, 3, 0, 7, 0, 1)
-		bar(3, 3, -7, 0, 0, 1) bar(3, 3, 7, 0, 0, 1)
-		bar(3, 3, -5, -5, 45, 1) bar(3, 3, 5, 5, 45, 1)
+		ring(9 * k, 9 * k, 0, 0, 2)
+		for i = 0, 7 do
+			local a = math.rad(i * 45)
+			bar(3.2 * k, 3.2 * k, math.cos(a) * 7 * k, math.sin(a) * 7 * k, i * 45, 1.5)
+		end
 	elseif name == "user" then
-		ring(8, 8, 0, -4, 1.5) box(14, 8, 0, 5, 1.5, 4)
+		ring(8 * k, 8 * k, 0, -4 * k, 1.8) box(14 * k, 7 * k, 0, 5.5 * k, 1.8, 4)
 	elseif name == "target" then
-		ring(15, 15, 0, 0, 1.5) ring(6, 6, 0, 0, 1.5) bar(2, 2, 0, 0, 0, 1)
+		ring(15 * k, 15 * k, 0, 0, 1.8) ring(7 * k, 7 * k, 0, 0, 1.8) bar(2.5 * k, 2.5 * k, 0, 0, 0, 2)
 	elseif name == "bolt" then
-		bar(3, 9, 1, -4, 18, 1) bar(3, 9, -1, 4, 18, 1) bar(7, 1.5, 0, 0, 18)
+		bar(3 * k, 9 * k, 1 * k, -4 * k, 18, 1.5) bar(3 * k, 9 * k, -1 * k, 4 * k, 18, 1.5) bar(7 * k, 2, 0, 0, 18)
 	elseif name == "shield" then
-		box(13, 14, 0, 0, 1.5, 6)
+		box(13 * k, 15 * k, 0, 0, 1.8, 6) bar(1.8, 7 * k, 0, 0, 0, 1)
 	elseif name == "grid" then
-		box(6, 6, -4, -4, 1.5, 1) box(6, 6, 4, -4, 1.5, 1) box(6, 6, -4, 4, 1.5, 1) box(6, 6, 4, 4, 1.5, 1)
+		box(6 * k, 6 * k, -4 * k, -4 * k, 1.8, 2) box(6 * k, 6 * k, 4 * k, -4 * k, 1.8, 2) box(6 * k, 6 * k, -4 * k, 4 * k, 1.8, 2) box(6 * k, 6 * k, 4 * k, 4 * k, 1.8, 2)
 	else
-		ring(14, 14, 0, 0, 1.5)
+		ring(14 * k, 14 * k, 0, 0, 1.8)
 	end
 	IconParts[root] = parts
 	return root
@@ -584,10 +587,13 @@ function Library:CreateWindow(cfg)
 	local railList = Create("Frame", { Size = UDim2.new(1, -36, 1, -130), Position = UDim2.new(0, 24, 0, 70), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
 	Create("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = railList })
 	local selFill = Create("Frame", { Size = UDim2.new(1, -36, 0, 32), Position = UDim2.new(0, 24, 0, 70), Visible = false, ZIndex = 11, Parent = rail })
-	self:AddToRegistry(selFill, { BackgroundColor3 = "Element" }); Corner(selFill, 9)
-	local selEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.75, Parent = selFill })
+	self:AddToRegistry(selFill, { BackgroundColor3 = "Well" }); Corner(selFill, 9)
+	local selEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.6, Parent = selFill })
 	self:AddToRegistry(selEdge, { Color = "Accent" })
-	Create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(0.6, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = selEdge })
+	Create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.5, 0.8), NumberSequenceKeypoint.new(1, 1) }), Parent = selEdge })
+	local selGlow = Create("Frame", { Size = UDim2.new(0, 3, 0, 14), Position = UDim2.new(0, 0, 0.5, -7), BorderSizePixel = 0, ZIndex = 12, Parent = selFill })
+	Corner(selGlow, 2); self:AddToRegistry(selGlow, { BackgroundColor3 = "Accent" })
+	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 0.6) }), Parent = selGlow })
 
 	-- rebindable menu key chip
 	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -36, 0, 26), Position = UDim2.new(0, 24, 1, -14), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
@@ -901,8 +907,9 @@ function Library:CreateWindow(cfg)
 		local cs = Create("UIStroke", { Thickness = 1, Transparency = 0.25, Parent = card })
 		Library:AddToRegistry(cs, { Color = "Outline" })
 		-- light-catching top edge
-		local lightEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.86, Color = Color3.fromRGB(255, 255, 255), Parent = card })
-		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.25, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = lightEdge })
+		local lightEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.7, Parent = card })
+		Library:AddToRegistry(lightEdge, { Color = "Accent" })
+		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.18, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = lightEdge })
 		local head2 = Create("TextButton", { Size = UDim2.new(1, 0, 0, 38), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 13, Parent = card })
 		local t = Text(head2, string.upper(name), 10, true); t.Position = UDim2.new(0, 16, 0, 0); t.Size = UDim2.new(1, -60, 1, 0); t.ZIndex = 14
 		local chev = Chevron(head2, 12, "FontDim"); chev.AnchorPoint = Vector2.new(0.5, 0.5); chev.Position = UDim2.new(1, -18, 0.5, 0); chev.ZIndex = 14; chev.Rotation = 180
@@ -1219,11 +1226,16 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 
 	local list, listBody = PopupShell(220, 60, 12, 6)
 	Shadow(list, 10)
+	do
+		local le = Create("UIStroke", { Thickness = 1, Transparency = 0.7, Parent = list })
+		Library:AddToRegistry(le, { Color = "Accent" })
+		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.2, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = le })
+	end
 	Library.OpenPopups[list] = list
 	local search
 	if cfg.Searchable then
 		local sf = Create("Frame", { Size = UDim2.new(1, 0, 0, 28), LayoutOrder = 0, ZIndex = 61, Parent = listBody })
-		Library:AddToRegistry(sf, { BackgroundColor3 = "Element" }); Corner(sf, 8)
+		Library:AddToRegistry(sf, { BackgroundColor3 = "Well" }); Corner(sf, 8); Stroke(sf, "Outline")
 		local si = SearchIcon(sf, 12, "FontDim"); si.Position = UDim2.new(0, 9, 0.5, -6); si.ZIndex = 62
 		search = Create("TextBox", { Size = UDim2.new(1, -34, 1, 0), Position = UDim2.new(0, 26, 0, 0), BackgroundTransparency = 1, Text = "", PlaceholderText = "search", TextSize = 12, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 62, Parent = sf })
 		Library:AddToRegistry(search, { TextColor3 = "Font", PlaceholderColor3 = "FontDim" })
@@ -1271,7 +1283,7 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 			if q == "" or string.find(string.lower(tostring(v)), q, 1, true) then
 				shown = shown + 1
 				local selected = obj.Multi and obj.Value[v] or (not obj.Multi and obj.Value == v)
-				local ib = Create("TextButton", { Size = UDim2.new(1, 0, 0, 26), Text = "", AutoButtonColor = false, BackgroundTransparency = selected and 0 or 1, LayoutOrder = i, ZIndex = 62, Parent = scroll })
+				local ib = Create("TextButton", { Size = UDim2.new(1, 0, 0, 26), Text = "", AutoButtonColor = false, BackgroundTransparency = selected and 0.35 or 1, LayoutOrder = i, ZIndex = 62, Parent = scroll })
 				Library:AddToRegistry(ib, { BackgroundColor3 = "Element" })
 				Corner(ib, 7)
 				local il = Text(ib, tostring(v), 12, selected, selected and "Font" or "FontDim")
@@ -1280,8 +1292,8 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 				local t1 = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(4, 1.6), Position = UDim2.new(0.5, -3, 0.5, 1), Rotation = 45, BorderSizePixel = 0, ZIndex = 64, Parent = tick })
 				local t2 = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(8, 1.6), Position = UDim2.new(0.5, 1, 0.5, -1), Rotation = -45, BorderSizePixel = 0, ZIndex = 64, Parent = tick })
 				Library:AddToRegistry(t1, { BackgroundColor3 = "Accent" }); Library:AddToRegistry(t2, { BackgroundColor3 = "Accent" })
-				ib.MouseEnter:Connect(function() if not selected then ib.BackgroundTransparency = 0.4 end end)
-				ib.MouseLeave:Connect(function() if not selected then ib.BackgroundTransparency = 1 end end)
+				ib.MouseEnter:Connect(function() Tween(ib, { BackgroundTransparency = selected and 0.2 or 0.6 }, 0.1) Tween(il, { TextColor3 = Library.Theme.Font }, 0.1) end)
+				ib.MouseLeave:Connect(function() Tween(ib, { BackgroundTransparency = selected and 0.35 or 1 }, 0.14) if not selected then Tween(il, { TextColor3 = Library.Theme.FontDim }, 0.14) end end)
 				ib.MouseButton1Click:Connect(function()
 					if obj.Multi then
 						if obj.Value[v] then obj.Value[v] = nil else obj.Value[v] = true end
@@ -1298,8 +1310,9 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	end
 	if search then search:GetPropertyChangedSignal("Text"):Connect(build) end
 	btn.MouseButton1Click:Connect(function()
-		if list.Visible then list.Visible = false Tween(arrow, { Rotation = 0 }, 0.16) bstroke.Color = Library.Theme.Outline return end
+		if list.Visible then list.Visible = false Tween(arrow, { Rotation = 0 }, 0.16) bstroke.Color = Library.Theme.Outline bstroke.Transparency = 0 return end
 		bstroke.Color = Library.Theme.Accent
+		bstroke.Transparency = 0.45
 		Library:_ClosePopups(list)
 		list.Size = UDim2.new(0, btn.AbsoluteSize.X, 0, 0)
 		local y = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 5
@@ -1312,7 +1325,7 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 		Tween(sc, { Scale = 1 }, 0.2, Enum.EasingStyle.Quint)
 		Tween(arrow, { Rotation = 180 }, 0.16)
 	end)
-	list:GetPropertyChangedSignal("Visible"):Connect(function() if not list.Visible then bstroke.Color = Library.Theme.Outline Tween(arrow, { Rotation = 0 }, 0.16) end end)
+	list:GetPropertyChangedSignal("Visible"):Connect(function() if not list.Visible then bstroke.Color = Library.Theme.Outline bstroke.Transparency = 0 Tween(arrow, { Rotation = 0 }, 0.16) end end)
 	function obj:SetValues(vals)
 		self.Values = vals or {}
 		if self.Multi then
@@ -1855,7 +1868,7 @@ ThemeManager.Folder = "DexoriUI"
 ThemeManager.Library = nil
 ThemeManager.BuiltIn = {
 	["Frostbite"] = { Background = "070a10", Main = "0b0f17", Element = "111722", ElementHover = "18202e", Accent = "60b2ff", AccentGradient = { "96d6ff", "2260be", 0 }, Outline = "1c2636", OutlineStrong = "2e568c", Font = "e2ebf5", FontDim = "7889a0", Risky = "ff6060" },
-	["Dexori Red"] = { Background = "09090a", Well = "0e0e10", Main = "000000", Element = "131316", ElementHover = "1b1b1f", Accent = "d62830", AccentGradient = { "f33e46", "800e14", 0 }, Outline = "202024", OutlineStrong = "3a1418", Font = "e6e6e8", FontDim = "808088", Risky = "ff5050" },
+	["Dexori Red"] = { Background = "0a0a0b", Well = "000000", Main = "0e0e10", Element = "18181b", ElementHover = "212125", Accent = "d62830", AccentGradient = { "f33e46", "800e14", 0 }, Outline = "202024", OutlineStrong = "3a1418", Font = "e6e6e8", FontDim = "808088", Risky = "ff5050" },
 	["Nightshade"] = { Background = "0b0810", Main = "100c18", Element = "171124", ElementHover = "1f1830", Accent = "9b59ff", AccentGradient = { "c08cff", "5e2bd6", 0 }, Outline = "231a33", OutlineStrong = "42288c", Font = "ece6f8", FontDim = "8b7fa8", Risky = "ff6b6b" },
 	["Pine"] = { Background = "07100c", Main = "0b1712", Element = "10201a", ElementHover = "172c24", Accent = "34d399", AccentGradient = { "6ee7b7", "0f9268", 0 }, Outline = "173028", OutlineStrong = "1d6b4c", Font = "e4f3ec", FontDim = "76998a", Risky = "ff6b6b" },
 	["Carbon"] = { Background = "09090a", Main = "0e0e10", Element = "141416", ElementHover = "1c1c20", Accent = "d8d8dc", AccentGradient = { "ffffff", "8c8c94", 0 }, Outline = "1f1f23", OutlineStrong = "3a3a42", Font = "f2f2f4", FontDim = "83838c", Risky = "ff5050" },
