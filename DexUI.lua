@@ -1819,10 +1819,18 @@ function GroupboxMethods:AddESPPreview(cfg)
 				local pad = cfg.OutlineThickness or 0.035
 				for _, spec in ipairs({ { 1.0, pad, 0.0 } }) do
 					local shell
+					local specialMesh = d:FindFirstChildOfClass("SpecialMesh")
 					if d:IsA("MeshPart") then
 						shell = d:Clone()
 						for _, c in ipairs(shell:GetChildren()) do c:Destroy() end
 						shell.TextureID = ""
+					elseif specialMesh then
+						shell = d:Clone()
+						for _, c in ipairs(shell:GetChildren()) do
+							if not c:IsA("SpecialMesh") then c:Destroy() end
+						end
+						local sm = shell:FindFirstChildOfClass("SpecialMesh")
+						if sm then sm.TextureId = "" end
 					else
 						shell = Instance.new("Part")
 						shell.Shape = (d:IsA("Part") and d.Shape) or Enum.PartType.Block
@@ -1834,7 +1842,14 @@ function GroupboxMethods:AddESPPreview(cfg)
 					shell.Material = Enum.Material.Neon
 					shell.Color = glowColour
 					shell.Transparency = spec[3]
-					shell.Size = d.Size * spec[1] + Vector3.new(spec[2], spec[2], spec[2])
+					local sm = shell:FindFirstChildOfClass("SpecialMesh")
+					if sm and sm.MeshType == Enum.MeshType.FileMesh then
+						local k = 1 + spec[2] / math.max(d.Size.Y, 0.5)
+						sm.Scale = sm.Scale * k
+						shell.Size = d.Size
+					else
+						shell.Size = d.Size * spec[1] + Vector3.new(spec[2], spec[2], spec[2])
+					end
 					shell.Parent = glowWm
 					glowParts[#glowParts + 1] = { part = shell, src = d, base = spec[3] }
 				end
@@ -2623,21 +2638,25 @@ local LocalPlayer = Players.LocalPlayer
 local Cosmetics = { Library = nil, On = {}, Colour = {}, Alpha = {}, Rainbow = false, CharAlpha = 0, _conn = nil, _items = {}, _folder = nil,
 	Assets = {
 		HaloMesh = 94295002298033,
-		WingLeftMesh = 107575539959305,
-		WingRightMesh = 105091027171512,
-		FeatherTexture = 91647142310779,
 		CircleOuter = 137530322837065,
 		CircleInner = 90176716791462,
 		FloorGlow = 88776888306340,
+		StepRune = 117125626391152,
+		StepShock = 102666008230203,
+		StepSigil = 112751014108946,
 	} }
 local function assetId(n) n = tonumber(n) or 0 if n > 0 then return "rbxassetid://" .. n end return nil end
 
 local DEFAULTS = {
 	Halo = { colour = Color3.fromRGB(255, 215, 110), alpha = 0 },
-	Wings = { colour = Color3.fromRGB(240, 240, 255), alpha = 0.15 },
 	Circle = { colour = Color3.fromRGB(214, 40, 48), alpha = 0 },
 	Field = { colour = Color3.fromRGB(214, 40, 48), alpha = 0.55 },
+	Steps = { colour = Color3.fromRGB(214, 40, 48), alpha = 0 },
 }
+Cosmetics.StepStyle = "rune"
+Cosmetics.StepSize = 2.6
+Cosmetics.StepLife = 0.7
+Cosmetics.StepJumpBurst = true
 for k, v in pairs(DEFAULTS) do Cosmetics.Colour[k] = v.colour Cosmetics.Alpha[k] = v.alpha Cosmetics.On[k] = false end
 
 local function getChar()
@@ -2696,34 +2715,6 @@ function Cosmetics:_buildHalo()
 	return { kind = "Halo", segs = segs, radius = R }
 end
 
-function Cosmetics:_buildWings()
-	local f = self:_folderRef()
-	local ml, mr, tex = assetId(self.Assets.WingLeftMesh), assetId(self.Assets.WingRightMesh), assetId(self.Assets.FeatherTexture)
-	if ml and mr then
-		local wings = {}
-		for side, id in pairs({ [-1] = ml, [1] = mr }) do
-			local p = part({ Name = "_wing", Size = Vector3.new(1, 1, 1), Material = Enum.Material.Neon, Parent = f })
-			local sm = Instance.new("SpecialMesh")
-			sm.MeshType = Enum.MeshType.FileMesh
-			sm.MeshId = id
-			if tex then sm.TextureId = tex end
-			sm.Scale = Vector3.new(0.95, 0.95, 0.95)
-			sm.Parent = p
-			wings[#wings + 1] = { p = p, side = side }
-		end
-		return { kind = "Wings", meshWings = wings }
-	end
-	local feathers = {}
-	local spec = { { 3.2, 0.7, 8 }, { 2.9, 0.62, 24 }, { 2.5, 0.55, 42 }, { 2.0, 0.48, 60 }, { 1.5, 0.4, 78 } }
-	for side = -1, 1, 2 do
-		for i, s in ipairs(spec) do
-			local p = part({ Name = "_wing", Size = Vector3.new(s[1], 0.08, s[2]), Parent = f })
-			feathers[#feathers + 1] = { p = p, side = side, len = s[1], angle = math.rad(s[3]), idx = i }
-		end
-	end
-	return { kind = "Wings", feathers = feathers }
-end
-
 function Cosmetics:_buildCircle()
 	local f = self:_folderRef()
 	local outer, inner, glow = assetId(self.Assets.CircleOuter), assetId(self.Assets.CircleInner), assetId(self.Assets.FloorGlow)
@@ -2759,6 +2750,91 @@ function Cosmetics:_buildCircle()
 	return { kind = "Circle", rings = rings, spokes = spokes }
 end
 
+function Cosmetics:_stepTexture()
+	local key = ({ rune = "StepRune", shock = "StepShock", sigil = "StepSigil" })[self.StepStyle] or "StepRune"
+	return assetId(self.Assets[key])
+end
+
+function Cosmetics:_spawnRing(pos, big)
+	local f = self:_folderRef()
+	local colour = self.Rainbow and Color3.fromHSV((os.clock() * 0.15) % 1, 0.85, 1) or self.Colour.Steps
+	local size = self.StepSize * (big and 1.9 or 1)
+	local life = self.StepLife * (big and 1.4 or 1)
+	local tex = self:_stepTexture()
+	local p = part({ Name = "_step", Size = Vector3.new(size * 0.55, 0.05, size * 0.55), Transparency = 1, Material = Enum.Material.SmoothPlastic, CFrame = CFrame.new(pos) * CFrame.Angles(0, math.random() * 6.28, 0), Parent = f })
+	local decal
+	if tex then
+		decal = Instance.new("Decal")
+		decal.Face = Enum.NormalId.Top
+		decal.Texture = tex
+		decal.Color3 = colour
+		decal.Transparency = self.Alpha.Steps
+		decal.Parent = p
+	else
+		p.Transparency = self.Alpha.Steps
+		p.Material = Enum.Material.Neon
+		p.Color = colour
+		p.Shape = Enum.PartType.Cylinder
+		p.Size = Vector3.new(0.05, size * 0.55, size * 0.55)
+		p.CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(90))
+	end
+	task.spawn(function()
+		local t0 = os.clock()
+		local spin = (math.random() > 0.5 and 1 or -1) * 0.6
+		while p.Parent do
+			local t = (os.clock() - t0) / life
+			if t >= 1 then break end
+			local ease = 1 - (1 - t) ^ 3
+			local s = size * (0.55 + 0.45 * ease)
+			if tex then
+				p.Size = Vector3.new(s, 0.05, s)
+				p.CFrame = CFrame.new(pos + Vector3.new(0, 0.02 * ease, 0)) * CFrame.Angles(0, spin * t, 0)
+				decal.Transparency = self.Alpha.Steps + (1 - self.Alpha.Steps) * (t ^ 1.6)
+			else
+				p.Size = Vector3.new(0.05, s, s)
+				p.Transparency = self.Alpha.Steps + (1 - self.Alpha.Steps) * (t ^ 1.6)
+			end
+			task.wait()
+		end
+		pcall(function() p:Destroy() end)
+	end)
+end
+
+function Cosmetics:_floorY(ch, hrp)
+	local hum = ch:FindFirstChildOfClass("Humanoid")
+	local hip = (hum and hum.HipHeight > 0) and hum.HipHeight or 2
+	local floorY = hrp.Position.Y - (hip + hrp.Size.Y * 0.5)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { ch, self._folder }
+	local hit = Workspace:Raycast(hrp.Position, Vector3.new(0, -12, 0), params)
+	if hit then floorY = hit.Position.Y end
+	return floorY
+end
+
+function Cosmetics:_buildSteps()
+	local ch, hrp = getChar()
+	local feet = {}
+	if ch then
+		for _, n in ipairs({ "LeftFoot", "RightFoot", "Left Leg", "Right Leg" }) do
+			local f = ch:FindFirstChild(n)
+			if f then feet[#feet + 1] = { part = f, down = false } end
+		end
+	end
+	local item = { kind = "Steps", feet = feet, lastLand = 0 }
+	local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+	if hum then
+		item.stateConn = hum.StateChanged:Connect(function(_, new)
+			if new == Enum.HumanoidStateType.Landed and self.StepJumpBurst and hrp then
+				local floorY = self:_floorY(ch, hrp)
+				self:_spawnRing(Vector3.new(hrp.Position.X, floorY + 0.06, hrp.Position.Z), true)
+				item.lastLand = os.clock()
+			end
+		end)
+	end
+	return item
+end
+
 function Cosmetics:_buildField()
 	local f = self:_folderRef()
 	local ball = part({ Name = "_field", Shape = Enum.PartType.Ball, Size = Vector3.new(9, 9, 9), Material = Enum.Material.ForceField, Parent = f })
@@ -2785,27 +2861,6 @@ function Cosmetics:_update(dt)
 				local a = s.a + spin
 				s.p.CFrame = centre * CFrame.Angles(0, a, 0) * CFrame.new(item.radius, 0, 0) * CFrame.Angles(0, math.rad(90), 0)
 				s.p.Color = colour s.p.Transparency = alpha
-			end
-		elseif kind == "Wings" and torso then
-			local flap = math.sin(t * 2.0) * math.rad(12)
-			if item.meshWings then
-				for _, w in ipairs(item.meshWings) do
-					local root = torso.CFrame * CFrame.new(w.side * 0.15, 0.55, 0.62)
-					w.p.CFrame = root
-						* CFrame.Angles(0, w.side * math.rad(-38) + w.side * flap, 0)
-						* CFrame.Angles(0, 0, w.side * math.rad(28))
-						* CFrame.Angles(math.rad(6), 0, 0)
-					w.p.Color = colour w.p.Transparency = alpha
-					local sm = w.p:FindFirstChildOfClass("SpecialMesh")
-					if sm then sm.VertexColor = Vector3.new(colour.R, colour.G, colour.B) end
-				end
-			end
-			local base = torso.CFrame * CFrame.new(0, 0.5, 0.6)
-			for _, fe in ipairs(item.feathers or {}) do
-				local sweep = fe.angle + flap * (1 - fe.idx * 0.12)
-				local cf = base * CFrame.Angles(0, math.rad(fe.side * -30), 0) * CFrame.Angles(0, 0, fe.side * -sweep) * CFrame.new(fe.side * fe.len * 0.5, 0, 0)
-				fe.p.CFrame = cf
-				fe.p.Color = colour fe.p.Transparency = alpha
 			end
 		elseif kind == "Circle" then
 			local hum = ch:FindFirstChildOfClass("Humanoid")
@@ -2836,6 +2891,22 @@ function Cosmetics:_update(dt)
 				sp.p.CFrame = floor * CFrame.Angles(0, sp.a - t * 0.9, 0) * CFrame.new(0, 0, 2.35 * 0.5)
 				sp.p.Color = colour sp.p.Transparency = alpha
 			end
+		elseif kind == "Steps" then
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			params.FilterDescendantsInstances = { ch, self._folder }
+			for _, ft in ipairs(item.feet) do
+				if ft.part.Parent then
+					local hit = Workspace:Raycast(ft.part.Position, Vector3.new(0, -(ft.part.Size.Y * 0.5 + 0.35), 0), params)
+					local onGround = hit ~= nil
+					if onGround and not ft.down and os.clock() - item.lastLand > 0.15 then
+						if hrp.AssemblyLinearVelocity.Magnitude > 2 then
+							self:_spawnRing(Vector3.new(ft.part.Position.X, hit.Position.Y + 0.06, ft.part.Position.Z), false)
+						end
+					end
+					ft.down = onGround
+				end
+			end
 		elseif kind == "Field" then
 			local s = 9 + math.sin(t * 1.6) * 0.25
 			item.ball.Size = Vector3.new(s, s, s)
@@ -2862,13 +2933,12 @@ function Cosmetics:_destroyItem(kind)
 	if not item then return end
 	local function kill(p) pcall(function() p:Destroy() end) end
 	if item.segs then for _, s in ipairs(item.segs) do kill(s.p) end end
-	if item.feathers then for _, fe in ipairs(item.feathers) do kill(fe.p) end end
 	if item.rings then for _, r in ipairs(item.rings) do for _, s in ipairs(r.segs) do kill(s.p) end end end
 	if item.spokes then for _, s in ipairs(item.spokes) do kill(s.p) end end
 	if item.ball then kill(item.ball) end
 	if item.mesh then kill(item.mesh) end
-	if item.meshWings then for _, w in ipairs(item.meshWings) do kill(w.p) end end
 	if item.layers then for _, ly in ipairs(item.layers) do kill(ly.p) end end
+	if item.stateConn then pcall(function() item.stateConn:Disconnect() end) end
 	self._items[kind] = nil
 end
 
@@ -2877,9 +2947,9 @@ function Cosmetics:Set(kind, on)
 	self:_destroyItem(kind)
 	if on then
 		if kind == "Halo" then self._items[kind] = self:_buildHalo()
-		elseif kind == "Wings" then self._items[kind] = self:_buildWings()
 		elseif kind == "Circle" then self._items[kind] = self:_buildCircle()
-		elseif kind == "Field" then self._items[kind] = self:_buildField() end
+		elseif kind == "Field" then self._items[kind] = self:_buildField()
+		elseif kind == "Steps" then self._items[kind] = self:_buildSteps() end
 		self:_ensureLoop()
 	end
 end
@@ -2912,17 +2982,24 @@ end
 function Cosmetics:BuildTab(tab)
 	local Library = self.Library
 	local left = tab:AddLeftGroupbox("Cosmetics")
-	local labels = { Halo = "halo", Wings = "angel wings", Circle = "magic circle", Field = "force field" }
-	for _, kind in ipairs({ "Halo", "Wings", "Circle", "Field" }) do
+	local labels = { Halo = "halo", Circle = "magic circle", Field = "force field", Steps = "footstep rings" }
+	for _, kind in ipairs({ "Halo", "Circle", "Field", "Steps" }) do
 		left:AddToggle("Cosm_" .. kind, { Text = labels[kind], Default = false, Callback = function(v) self:Set(kind, v) end })
 			:AddColorPicker("Cosm_" .. kind .. "_Colour", { Default = self.Colour[kind], Title = labels[kind] .. " colour", Callback = function(c) self.Colour[kind] = c end })
 		left:AddSlider("Cosm_" .. kind .. "_Alpha", { Text = labels[kind] .. " transparency", Default = self.Alpha[kind], Min = 0, Max = 0.95, Rounding = 2, Callback = function(v) self.Alpha[kind] = v end })
 	end
+	left:AddDropdown("Cosm_StepStyle", { Text = "footstep style", Values = { "rune", "shock", "sigil" }, Default = 1, Callback = function(v)
+		if type(v) == "table" then for k, on in pairs(v) do if on then v = k break end end end
+		self.StepStyle = v
+	end })
+	left:AddSlider("Cosm_StepSize", { Text = "ring size", Default = 2.6, Min = 1, Max = 6, Rounding = 1, Suffix = " studs", Callback = function(v) self.StepSize = v end })
+	left:AddSlider("Cosm_StepLife", { Text = "ring lifetime", Default = 0.7, Min = 0.2, Max = 2, Rounding = 2, Suffix = "s", Callback = function(v) self.StepLife = v end })
+	left:AddToggle("Cosm_StepJump", { Text = "big ring on landing", Default = true, Callback = function(v) self.StepJumpBurst = v end })
 	local right = tab:AddRightGroupbox("Character")
 	right:AddSlider("Cosm_CharAlpha", { Text = "character transparency", Default = 0, Min = 0, Max = 1, Rounding = 2, Callback = function(v) self:SetCharacterAlpha(v) end })
 	right:AddToggle("Cosm_Rainbow", { Text = "rainbow cycle (all cosmetics)", Default = false, Callback = function(v) self.Rainbow = v end })
 	right:AddButton({ Text = "clear everything", Risky = true, Func = function()
-		for _, kind in ipairs({ "Halo", "Wings", "Circle", "Field" }) do
+		for _, kind in ipairs({ "Halo", "Circle", "Field", "Steps" }) do
 			local t = Library.Toggles["Cosm_" .. kind]
 			if t then t:SetValue(false) end
 		end
