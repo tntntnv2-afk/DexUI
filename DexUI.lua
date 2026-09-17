@@ -766,7 +766,6 @@ function Library:CreateWindow(cfg)
 			return c
 		end
 		local l, r = col(0, -5), col(0.5, -5)
-		l._scroller = nil
 		return l, r, scroller
 	end
 
