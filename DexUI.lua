@@ -1808,9 +1808,9 @@ function GroupboxMethods:AddESPPreview(cfg)
 	local body = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(BW, BH), Position = UDim2.new(0.5, 0, 0.5, 6), BackgroundTransparency = 1, ZIndex = 6, Parent = canvas })
 	local avatar = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(IMG, IMG), Position = UDim2.new(0.5, 0, 0.5, 2), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, ZIndex = 6, Parent = body })
 	local function setUser(userId)
-		avatar.Image = string.format("rbxthumb://type=AvatarThumbnail&id=%d&w=420&h=420", tonumber(userId) or LocalPlayer.UserId)
+		avatar.Image = string.format("rbxthumb://type=AvatarThumbnail&id=%d&w=420&h=420", tonumber(userId) or 5508585538)
 	end
-	setUser(cfg.UserId or LocalPlayer.UserId)
+	setUser(cfg.UserId or 5508585538)
 	-- joints as proportions of the body box (typical R15 full-body render)
 	local function J(x, y) return Vector2.new(BW * x, BH * y) end
 	local joints = {
