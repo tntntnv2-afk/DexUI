@@ -2790,9 +2790,14 @@ function Cosmetics:_update(dt)
 			local flap = math.sin(t * 2.0) * math.rad(12)
 			if item.meshWings then
 				for _, w in ipairs(item.meshWings) do
-					local root = torso.CFrame * CFrame.new(w.side * 0.2, 0.45, 0.55)
-					w.p.CFrame = root * CFrame.Angles(0, w.side * math.rad(-32) + w.side * flap, 0) * CFrame.Angles(math.rad(8), 0, 0)
+					local root = torso.CFrame * CFrame.new(w.side * 0.15, 0.55, 0.62)
+					w.p.CFrame = root
+						* CFrame.Angles(0, w.side * math.rad(-38) + w.side * flap, 0)
+						* CFrame.Angles(0, 0, w.side * math.rad(28))
+						* CFrame.Angles(math.rad(6), 0, 0)
 					w.p.Color = colour w.p.Transparency = alpha
+					local sm = w.p:FindFirstChildOfClass("SpecialMesh")
+					if sm then sm.VertexColor = Vector3.new(colour.R, colour.G, colour.B) end
 				end
 			end
 			local base = torso.CFrame * CFrame.new(0, 0.5, 0.6)
@@ -2804,8 +2809,14 @@ function Cosmetics:_update(dt)
 			end
 		elseif kind == "Circle" then
 			local hum = ch:FindFirstChildOfClass("Humanoid")
-			local hip = hum and hum.HipHeight or 2
-			local floor = CFrame.new(hrp.Position - Vector3.new(0, hip + hrp.Size.Y * 0.5 - 0.06, 0))
+			local hip = (hum and hum.HipHeight > 0) and hum.HipHeight or 2
+			local floorY = hrp.Position.Y - (hip + hrp.Size.Y * 0.5)
+			local params = RaycastParams.new()
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			params.FilterDescendantsInstances = { ch, self._folder }
+			local hit = Workspace:Raycast(hrp.Position, Vector3.new(0, -12, 0), params)
+			if hit then floorY = hit.Position.Y end
+			local floor = CFrame.new(hrp.Position.X, floorY + 0.08, hrp.Position.Z)
 			if item.layers then
 				for _, ly in ipairs(item.layers) do
 					ly.p.CFrame = floor * CFrame.Angles(0, t * ly.spin, 0)
