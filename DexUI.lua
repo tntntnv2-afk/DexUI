@@ -473,7 +473,7 @@ Create("UIListLayout", { Padding = UDim.new(0, 1), SortOrder = Enum.SortOrder.La
 function Library:SetWatermarkVisibility(on) Watermark.Visible = on and true or false end
 Watermark.Visible = false
 function Library:SetWatermark(text) WmText.Text = text or "dexori" end
-function Library:RegisterSearch(name, path, focus) table.insert(self.SearchIndex, { name = name, path = path, focus = focus }) end
+function Library:RegisterSearch(name, path, focus, obj) table.insert(self.SearchIndex, { name = name, path = path, focus = focus, obj = obj }) end
 local function runSearch(q)
 	for _, c in ipairs(WmResults:GetChildren()) do if c:IsA("TextButton") then c:Destroy() end end
 	q = string.lower(q or "")
@@ -1083,7 +1083,7 @@ local function row(gb, h, plain)
 	end
 	return f
 end
-local function reg(gb, name, frame) Library:RegisterSearch(name, gb.Path, function() gb:_focus(frame) end) end
+local function reg(gb, name, frame, obj) Library:RegisterSearch(name, gb.Path, function() gb:_focus(frame) end, obj) end
 
 local function slotHolder(frame)
 	local h = frame:FindFirstChild("_slots")
@@ -1167,6 +1167,8 @@ function GroupboxMethods:AddButton(cfg, func)
 			else armed = true l.Text = "confirm?" task.delay(1.4, function() if armed then armed = false l.Text = cfg.Text end end) end
 		else pcall(cfg.Func) end
 	end)
+	obj.Type = "Button"
+	obj.Click = function() pcall(cfg.Func) end
 	function obj:SetText(t) l.Text = t end
 	function obj:AddButton(cfg2, func2)
 		if type(cfg2) == "string" then cfg2 = { Text = cfg2, Func = func2 } end
@@ -1174,10 +1176,11 @@ function GroupboxMethods:AddButton(cfg, func)
 		local b2, l2 = makeButton(f, cfg2, 0.5, -4, 4)
 		b2.Position = UDim2.new(0.5, 4, 0, 0)
 		b2.MouseButton1Click:Connect(function() pcall(cfg2.Func) end)
-		reg(self, cfg2.Text or "button", f)
-		return { Frame = f, Button = b2, SetText = function(_, t) l2.Text = t end }
+		local obj2 = { Frame = f, Button = b2, Type = "Button", Click = function() pcall(cfg2.Func) end, SetText = function(_, t) l2.Text = t end }
+		reg(self, cfg2.Text or "button", f, obj2)
+		return obj2
 	end
-	reg(self, cfg.Text or "button", f)
+	reg(self, cfg.Text or "button", f, obj)
 	return obj
 end
 
@@ -1228,7 +1231,7 @@ function GroupboxMethods:AddToggle(idx, cfg)
 	render(false)
 	if obj.Value and cfg.Callback then task.defer(function() pcall(cfg.Callback, true) end) end
 	Library.Toggles[idx] = obj
-	reg(self, cfg.Text or idx, f)
+	reg(self, cfg.Text or idx, f, obj)
 	return obj
 end
 
@@ -1290,7 +1293,7 @@ function GroupboxMethods:AddSlider(idx, cfg)
 	end))
 	render()
 	Library.Options[idx] = obj
-	reg(self, cfg.Text or idx, f)
+	reg(self, cfg.Text or idx, f, obj)
 	return obj
 end
 
@@ -1316,7 +1319,7 @@ function GroupboxMethods:AddInput(idx, cfg)
 	function obj:SetValue(v, silent) tb.Text = tostring(v or "") self.Value = tb.Text if not silent then fire() end end
 	function obj:OnChanged(fn) table.insert(self._changed, fn) end
 	Library.Options[idx] = obj
-	reg(self, cfg.Text or idx, f)
+	reg(self, cfg.Text or idx, f, obj)
 	return obj
 end
 
@@ -1446,7 +1449,7 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	function obj:OnChanged(fn) table.insert(self._changed, fn) end
 	display()
 	Library.Options[idx] = obj
-	reg(self, cfg.Text or idx, f)
+	reg(self, cfg.Text or idx, f, obj)
 	return obj
 end
 
@@ -1637,7 +1640,7 @@ function GroupboxMethods:AddColorPicker(idx, cfg)
 	local obj = Library._AttachColorPicker(nil, f, idx, cfg)
 	bindLabelWidth(l, f, 0)
 	obj.Frame = f
-	reg(self, cfg.Text or idx, f)
+	reg(self, cfg.Text or idx, f, obj)
 	return obj
 end
 
@@ -1763,7 +1766,7 @@ function GroupboxMethods:AddKeyPicker(idx, cfg)
 	local obj = Library._AttachKeyPicker(nil, f, idx, cfg)
 	bindLabelWidth(l, f, 0)
 	obj.Frame = f
-	reg(self, cfg.Text or idx, f)
+	reg(self, cfg.Text or idx, f, obj)
 	return obj
 end
 
@@ -1804,6 +1807,18 @@ function GroupboxMethods:AddESPPreview(cfg)
 		if hum then hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
 		m:PivotTo(CFrame.new(0, 0, 0))
 		dummy = m
+		task.defer(function()
+			pcall(function()
+				local h = m:FindFirstChildOfClass("Humanoid")
+				if not h then return end
+				local animator = h:FindFirstChildOfClass("Animator") or Instance.new("Animator", h)
+				local anim = Instance.new("Animation")
+				anim.AnimationId = h.RigType == Enum.HumanoidRigType.R6 and "rbxassetid://180435571" or "rbxassetid://507766666"
+				local track = animator:LoadAnimation(anim)
+				track.Looped = true
+				track:Play()
+			end)
+		end)
 	end)
 	if not dummy then
 		dummy = Instance.new("Model")
@@ -1907,6 +1922,50 @@ function GroupboxMethods:AddESPPreview(cfg)
 				P.Tracer.Size = UDim2.fromOffset(1, math.floor(len + 0.5))
 				P.Tracer.Position = UDim2.fromOffset(math.floor(ox), math.floor(oy))
 				P.Tracer.Rotation = -math.deg(math.atan2(dx, -dy))
+				-- corner box
+				P.Corners.Size = UDim2.fromOffset(math.floor(w + 0.5), math.floor(h + 0.5))
+				P.Corners.Position = UDim2.fromOffset(math.floor(cx + 0.5), math.floor(cy + 0.5))
+				local arm = math.max(6, math.floor(math.min(w, h) * 0.22))
+				local cb = t._cornerBars
+				cb[1].Position = UDim2.fromOffset(0, 0) cb[1].Size = UDim2.fromOffset(arm, 1.5)
+				cb[2].Position = UDim2.fromOffset(0, 0) cb[2].Size = UDim2.fromOffset(1.5, arm)
+				cb[3].Position = UDim2.new(1, -arm, 0, 0) cb[3].Size = UDim2.fromOffset(arm, 1.5)
+				cb[4].Position = UDim2.new(1, -1.5, 0, 0) cb[4].Size = UDim2.fromOffset(1.5, arm)
+				cb[5].Position = UDim2.new(0, 0, 1, -1.5) cb[5].Size = UDim2.fromOffset(arm, 1.5)
+				cb[6].Position = UDim2.new(0, 0, 1, -arm) cb[6].Size = UDim2.fromOffset(1.5, arm)
+				cb[7].Position = UDim2.new(1, -arm, 1, -1.5) cb[7].Size = UDim2.fromOffset(arm, 1.5)
+				cb[8].Position = UDim2.new(1, -1.5, 1, -arm) cb[8].Size = UDim2.fromOffset(1.5, arm)
+				-- skeleton
+				if P.Skeleton.Visible then
+					local bones = dummy:FindFirstChild("UpperTorso") and {
+						{ "Head", "UpperTorso" }, { "UpperTorso", "LowerTorso" },
+						{ "UpperTorso", "LeftUpperArm" }, { "LeftUpperArm", "LeftLowerArm" }, { "LeftLowerArm", "LeftHand" },
+						{ "UpperTorso", "RightUpperArm" }, { "RightUpperArm", "RightLowerArm" }, { "RightLowerArm", "RightHand" },
+						{ "LowerTorso", "LeftUpperLeg" }, { "LeftUpperLeg", "LeftLowerLeg" }, { "LeftLowerLeg", "LeftFoot" },
+						{ "LowerTorso", "RightUpperLeg" }, { "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" },
+					} or {
+						{ "Head", "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" }, { "Torso", "Left Leg" }, { "Torso", "Right Leg" },
+					}
+					for bi, pair in ipairs(bones) do
+						local ln = t._skelLines[bi]
+						if not ln then
+							ln = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(1, 1.5), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 9, Parent = P.Skeleton })
+							t._skelLines[bi] = ln
+						end
+						local pa, pb = dummy:FindFirstChild(pair[1]), dummy:FindFirstChild(pair[2])
+						local a2 = pa and project(pa.Position)
+						local b2 = pb and project(pb.Position)
+						if a2 and b2 then
+							local ddx, ddy = b2.X - a2.X, b2.Y - a2.Y
+							ln.Visible = true
+							ln.Position = UDim2.fromOffset((a2.X + b2.X) * 0.5, (a2.Y + b2.Y) * 0.5)
+							ln.Size = UDim2.fromOffset(math.max(1, math.sqrt(ddx * ddx + ddy * ddy)), 1.5)
+							ln.Rotation = math.deg(math.atan2(ddy, ddx))
+						else
+							ln.Visible = false
+						end
+					end
+				end
 			end
 		end
 	end))
@@ -1922,7 +1981,20 @@ function GroupboxMethods:AddESPPreview(cfg)
 		local hpBg = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.new(0, 60, 0, 3), Position = UDim2.new(0.5, 0, 0.5, -52), BackgroundColor3 = Color3.fromRGB(0, 0, 0), BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(0, 0, 0), ZIndex = 9, Parent = page })
 		local hp = Create("Frame", { Size = UDim2.fromScale(0.72, 1), BackgroundColor3 = Color3.fromRGB(71, 255, 0), BorderSizePixel = 0, ZIndex = 10, Parent = hpBg })
 		local tracer = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 1, 0, 70), Position = UDim2.new(0.5, 0, 1, 0), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, Visible = false, ZIndex = 8, Parent = page })
-		local tab = { Name = name, Page = page, Parts = { Box = box, BoxStroke = boxStroke, Name = nameL, Distance = distL, HealthBg = hpBg, Health = hp, Tracer = tracer, Weapon = weapon } }
+		local corners = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(64, 132), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 8, Parent = page })
+		local cornerBars = {}
+		for ci = 1, 8 do
+			local bar = Create("Frame", { BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 9, Parent = corners })
+			cornerBars[ci] = bar
+		end
+		local skel = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 8, Parent = page })
+		local skelLines = {}
+		local tab = { Name = name, Page = page, Parts = { Box = box, BoxStroke = boxStroke, Name = nameL, Distance = distL, HealthBg = hpBg, Health = hp, Tracer = tracer, Weapon = weapon, Corners = corners, Skeleton = skel }, _cornerBars = cornerBars, _skelLines = skelLines, BoxStyle = "full" }
+		function tab:SetBoxStyle(style)
+			self.BoxStyle = style
+			self.Parts.Box.Visible = (style == "full") and self._boxOn ~= false
+			self.Parts.Corners.Visible = (style == "corner") and self._boxOn ~= false
+		end
 		preview._tracked = preview._tracked or {}
 		table.insert(preview._tracked, tab)
 		function tab:SetText(which, text)
@@ -1938,9 +2010,19 @@ function GroupboxMethods:AddESPPreview(cfg)
 			for key, val in pairs(settings) do
 				local part = self.Parts[key]
 				if part then
-					if typeof(val) == "boolean" then part.Visible = val
+					if typeof(val) == "boolean" then
+						if key == "Box" then
+							self._boxOn = val
+							self.Parts.Box.Visible = val and self.BoxStyle == "full"
+							self.Parts.Corners.Visible = val and self.BoxStyle == "corner"
+						else
+							part.Visible = val
+						end
 					elseif typeof(val) == "Color3" then
-						if part:IsA("TextLabel") then part.TextColor3 = val elseif key == "Box" then self.Parts.BoxStroke.Color = val else part.BackgroundColor3 = val end
+						if part:IsA("TextLabel") then part.TextColor3 = val
+						elseif key == "Box" then self.Parts.BoxStroke.Color = val for _, b in ipairs(self._cornerBars) do b.BackgroundColor3 = val end
+						elseif key == "Skeleton" then for _, ln in ipairs(self._skelLines) do ln.BackgroundColor3 = val end
+						else part.BackgroundColor3 = val end
 					end
 				end
 			end
@@ -1967,6 +2049,280 @@ function GroupboxMethods:AddESPPreview(cfg)
 	function preview:Set(name, settings) local t = self:GetTab(name) if t then t:Set(settings) end end
 	if preview.Tabs[1] then preview.Tabs[1]:Select() end
 	return preview
+end
+
+do
+	local W = 520
+	local veil = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 1, AutoButtonColor = false, Text = "", Visible = false, ZIndex = 950, Parent = PopupLayer })
+	local box = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(W, 52), Position = UDim2.new(0.5, 0, 0.22, 0), BackgroundTransparency = 0.04, ZIndex = 951, Parent = veil })
+	Library:AddToRegistry(box, { BackgroundColor3 = "Main" }); Corner(box, 12)
+	local bst = Create("UIStroke", { Thickness = 1, Transparency = 0.1, Parent = box }); Library:AddToRegistry(bst, { Color = "Outline" })
+	local bedge = Create("UIStroke", { Thickness = 1, Transparency = 0.55, Parent = box }); Library:AddToRegistry(bedge, { Color = "Accent" })
+	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.25, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = bedge })
+	Shadow(box, 16)
+	local icon = SearchIcon(box, 14, "FontDim"); icon.Position = UDim2.new(0, 16, 0, 19); icon.ZIndex = 952
+	local input = Create("TextBox", { Size = UDim2.new(1, -120, 0, 52), Position = UDim2.new(0, 38, 0, 0), BackgroundTransparency = 1, Text = "", PlaceholderText = "type a setting, action, or value...", TextSize = 14, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 952, Parent = box })
+	Library:AddToRegistry(input, { TextColor3 = "Font", PlaceholderColor3 = "FontDim" })
+	local hint = Text(box, "esc to close", 10, false, "FontDim"); hint.TextXAlignment = Enum.TextXAlignment.Right; hint.Position = UDim2.new(1, -90, 0, 0); hint.Size = UDim2.new(0, 76, 0, 52); hint.ZIndex = 952
+	local rule = Create("Frame", { Size = UDim2.new(1, -24, 0, 1), Position = UDim2.new(0, 12, 0, 52), BackgroundTransparency = 0.5, BorderSizePixel = 0, Visible = false, ZIndex = 952, Parent = box })
+	Library:AddToRegistry(rule, { BackgroundColor3 = "Outline" })
+	local listF = Create("Frame", { Size = UDim2.new(1, -12, 0, 0), Position = UDim2.new(0, 6, 0, 58), BackgroundTransparency = 1, ZIndex = 952, Parent = box })
+	Create("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = listF })
+
+	local open, rows, sel, results = false, {}, 1, {}
+	local ROW = 36
+
+	local function describe(e)
+		local o = e.obj
+		if not o then return "", "open" end
+		if o.Type == "Toggle" then return o.Value and "on" or "off", "toggle" end
+		if o.Type == "Button" then return "", "run" end
+		if o.Type == "Slider" then return tostring(o.Value), "set" end
+		if o.Type == "Dropdown" then
+			if o.Multi then local n = 0 for _ in pairs(o.Value or {}) do n = n + 1 end return n .. " selected", "open" end
+			return tostring(o.Value or "none"), "open"
+		end
+		return "", "open"
+	end
+
+	local paint
+	local function search(q)
+		q = string.lower(q or "")
+		results = {}
+		local num = tonumber(q:match("(-?%d+%.?%d*)%s*$"))
+		local name = q
+		if num then name = q:gsub("(-?%d+%.?%d*)%s*$", "") name = name:gsub("%s+$", "") end
+		if name == "" and not num then paint() return end
+		local scored = {}
+		for _, e in ipairs(Library.SearchIndex) do
+			local nm = string.lower(tostring(e.name or ""))
+			local pt = string.lower(tostring(e.path or ""))
+			local score = nil
+			if name ~= "" then
+				local a = nm:find(name, 1, true)
+				local b = pt:find(name, 1, true)
+				if a == 1 then score = 0 elseif a then score = 1 elseif b then score = 2 end
+			end
+			if score then
+				if num and e.obj and e.obj.Type ~= "Slider" then score = score + 5 end
+				scored[#scored + 1] = { e = e, s = score }
+			end
+		end
+		table.sort(scored, function(a, b) if a.s ~= b.s then return a.s < b.s end return tostring(a.e.name) < tostring(b.e.name) end)
+		for i = 1, math.min(8, #scored) do results[i] = scored[i].e end
+		Library._paletteNum = num
+		sel = 1
+		paint()
+	end
+
+	paint = function()
+		for _, r in ipairs(rows) do r.f:Destroy() end
+		rows = {}
+		local n = #results
+		listF.Size = UDim2.new(1, -12, 0, n * (ROW + 2))
+		box.Size = UDim2.fromOffset(W, 52 + (n > 0 and (n * (ROW + 2) + 12) or 0))
+		rule.Visible = n > 0
+		for i, e in ipairs(results) do
+			local f = Create("TextButton", { Size = UDim2.new(1, 0, 0, ROW), BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = (i == sel) and 0.93 or 1, AutoButtonColor = false, Text = "", LayoutOrder = i, ZIndex = 953, Parent = listF })
+			Corner(f, 8)
+			local nm = Text(f, e.name, 13, true); nm.Position = UDim2.new(0, 12, 0, 5); nm.Size = UDim2.new(1, -160, 0, 16); nm.ZIndex = 954
+			local pt = Text(f, e.path, 10, false, "FontDim"); pt.Position = UDim2.new(0, 12, 0, 21); pt.Size = UDim2.new(1, -160, 0, 12); pt.ZIndex = 954
+			local state, verb = describe(e)
+			local st = Text(f, state, 11, true, (state == "on") and "Accent" or "FontDim"); st.TextXAlignment = Enum.TextXAlignment.Right; st.AnchorPoint = Vector2.new(1, 0.5); st.Position = UDim2.new(1, -70, 0.5, 0); st.Size = UDim2.new(0, 80, 0, 14); st.ZIndex = 954
+			local vb = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.new(0, 0, 0, 18), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(1, -10, 0.5, 0), BackgroundTransparency = 1, ZIndex = 954, Parent = f })
+			Corner(vb, 6); local vs = Create("UIStroke", { Thickness = 1, Transparency = 0.4, Parent = vb }); Library:AddToRegistry(vs, { Color = (i == sel) and "Accent" or "Outline" })
+			Pad(vb, 7, 7, 0, 0)
+			local vt = Text(vb, verb, 10, true, (i == sel) and "Accent" or "FontDim"); vt.AutomaticSize = Enum.AutomaticSize.X; vt.Size = UDim2.new(0, 0, 1, 0); vt.ZIndex = 955
+			f.MouseEnter:Connect(function() if sel ~= i then sel = i paint() end end)
+			f.MouseButton1Click:Connect(function() sel = i Library:_PaletteRun() end)
+			rows[i] = { f = f }
+		end
+	end
+
+	function Library:_PaletteRun()
+		local e = results[sel]
+		if not e then return end
+		local o = e.obj
+		local num = self._paletteNum
+		if o and o.Type == "Toggle" then
+			o:SetValue(not o.Value)
+			search(input.Text)
+			return
+		elseif o and o.Type == "Button" then
+			o.Click()
+			self:Notify({ Title = "ran", Description = e.name, Time = 2 })
+		elseif o and o.Type == "Slider" and num then
+			o:SetValue(num)
+			search(input.Text)
+			return
+		else
+			pcall(e.focus)
+		end
+		self:_PaletteClose()
+	end
+
+	function Library:_PaletteOpen()
+		if open then return end
+		open = true
+		veil.Visible = true
+		RaisePopup(veil)
+		input.Text = ""
+		results = {}
+		paint()
+		box.Position = UDim2.new(0.5, 0, 0.2, 0)
+		Tween(box, { Position = UDim2.new(0.5, 0, 0.22, 0) }, 0.18, Enum.EasingStyle.Quint)
+		Tween(veil, { BackgroundTransparency = 0.5 }, 0.15)
+		task.defer(function() input:CaptureFocus() end)
+	end
+	function Library:_PaletteClose()
+		if not open then return end
+		open = false
+		input:ReleaseFocus()
+		Tween(veil, { BackgroundTransparency = 1 }, 0.12).Completed:Connect(function() if not open then veil.Visible = false end end)
+	end
+	function Library:TogglePalette() if open then self:_PaletteClose() else self:_PaletteOpen() end end
+
+	input:GetPropertyChangedSignal("Text"):Connect(function() if open then search(input.Text) end end)
+	veil.MouseButton1Click:Connect(function() Library:_PaletteClose() end)
+	Library:GiveSignal(UserInputService.InputBegan:Connect(function(inp, gpe)
+		if inp.UserInputType ~= Enum.UserInputType.Keyboard then return end
+		local ctrl = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+		if inp.KeyCode == Enum.KeyCode.K and ctrl then Library:TogglePalette() return end
+		if not open then return end
+		if inp.KeyCode == Enum.KeyCode.Escape then Library:_PaletteClose()
+		elseif inp.KeyCode == Enum.KeyCode.Down then sel = math.min(sel + 1, math.max(#results, 1)) paint()
+		elseif inp.KeyCode == Enum.KeyCode.Up then sel = math.max(sel - 1, 1) paint()
+		elseif inp.KeyCode == Enum.KeyCode.Return or inp.KeyCode == Enum.KeyCode.KeypadEnter then Library:_PaletteRun() end
+	end))
+end
+
+-- ===================================================================================
+-- Session stats
+-- ===================================================================================
+Library.Stats = { _t0 = os.clock(), _custom = {}, _order = {}, joins = 0, leaves = 0, deaths = 0, fpsMin = 999, fpsMax = 0, fpsAvg = 0, _fps = 0, _samples = {} }
+function Library.Stats:Add(key, n)
+	if not self._custom[key] then self._custom[key] = 0 table.insert(self._order, key) end
+	self._custom[key] = self._custom[key] + (n or 1)
+end
+function Library.Stats:Set(key, v)
+	if not self._custom[key] then table.insert(self._order, key) end
+	self._custom[key] = v
+end
+function Library.Stats:Get(key) return self._custom[key] end
+do
+	local S = Library.Stats
+	Library:GiveSignal(Players.PlayerAdded:Connect(function() S.joins = S.joins + 1 end))
+	Library:GiveSignal(Players.PlayerRemoving:Connect(function(p) if p ~= LocalPlayer then S.leaves = S.leaves + 1 end end))
+	local function hookChar(ch)
+		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+		if hum then hum.Died:Connect(function() S.deaths = S.deaths + 1 end) end
+	end
+	if LocalPlayer.Character then hookChar(LocalPlayer.Character) end
+	Library:GiveSignal(LocalPlayer.CharacterAdded:Connect(function(ch) task.defer(hookChar, ch) end))
+	task.spawn(function()
+		local frames, acc = 0, 0
+		Library:GiveSignal(RunService.RenderStepped:Connect(function(dt) frames = frames + 1 acc = acc + dt end))
+		while not Library.Unloaded do
+			task.wait(1)
+			local fps = frames
+			frames, acc = 0, 0
+			S._fps = fps
+			if fps > 0 then
+				S.fpsMin = math.min(S.fpsMin, fps)
+				S.fpsMax = math.max(S.fpsMax, fps)
+				table.insert(S._samples, fps)
+				if #S._samples > 120 then table.remove(S._samples, 1) end
+				local sum = 0
+				for _, v in ipairs(S._samples) do sum = sum + v end
+				S.fpsAvg = math.floor(sum / #S._samples + 0.5)
+			end
+		end
+	end)
+end
+
+function GroupboxMethods:AddSession(cfg)
+	cfg = cfg or {}
+	local S = Library.Stats
+	local f = row(self, 150, true)
+
+	-- fps graph
+	local graph = Create("Frame", { Size = UDim2.new(1, 0, 0, 54), Position = UDim2.new(0, 0, 0, 0), ClipsDescendants = true, ZIndex = 5, Parent = f })
+	Library:AddToRegistry(graph, { BackgroundColor3 = "Well" }); Corner(graph, 8); Stroke(graph, "Outline")
+	local BARS = 60
+	local bars = {}
+	for i = 1, BARS do
+		local b = Create("Frame", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1 / BARS, -1, 0, 2), Position = UDim2.new((i - 1) / BARS, 0, 1, 0), BorderSizePixel = 0, ZIndex = 6, Parent = graph })
+		Library:AddToRegistry(b, { BackgroundColor3 = "Accent" })
+		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 0.7) }), Parent = b })
+		bars[i] = b
+	end
+	local fpsNow = Text(graph, "", 11, true); fpsNow.Position = UDim2.new(0, 8, 0, 4); fpsNow.Size = UDim2.new(0, 120, 0, 14); fpsNow.ZIndex = 7
+	local fpsRange = Text(graph, "", 10, false, "FontDim"); fpsRange.TextXAlignment = Enum.TextXAlignment.Right; fpsRange.Position = UDim2.new(1, -128, 0, 4); fpsRange.Size = UDim2.new(0, 120, 0, 14); fpsRange.ZIndex = 7
+
+	-- stat tiles: 2 columns
+	local grid = Create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.new(0, 0, 0, 62), BackgroundTransparency = 1, ZIndex = 5, Parent = f })
+	local layout = Create("UIGridLayout", { CellSize = UDim2.new(0.5, -3, 0, 38), CellPadding = UDim2.new(0, 6, 0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = grid })
+	local tiles = {}
+	local function tile(key, label)
+		local t = Create("Frame", { ZIndex = 5, LayoutOrder = #tiles + 1, Parent = grid })
+		Library:AddToRegistry(t, { BackgroundColor3 = "Element" }); Corner(t, 8); Stroke(t, "Outline")
+		local l = Text(t, string.upper(label), 9, true, "FontDim"); l.Position = UDim2.new(0, 10, 0, 5); l.Size = UDim2.new(1, -20, 0, 11); l.ZIndex = 6
+		local v = Text(t, "0", 13, true); v.Position = UDim2.new(0, 10, 0, 18); v.Size = UDim2.new(1, -20, 0, 16); v.ZIndex = 6
+		tiles[#tiles + 1] = { key = key, value = v, frame = t }
+		return t
+	end
+	tile("uptime", "uptime"); tile("ping", "ping"); tile("joins", "joins"); tile("leaves", "leaves"); tile("deaths", "deaths"); tile("players", "in server")
+	local customTiles = {}
+	local function ensureCustom()
+		for _, key in ipairs(S._order) do
+			if not customTiles[key] then customTiles[key] = tile("custom:" .. key, key) end
+		end
+	end
+	local function relayoutHeight()
+		local n = #tiles
+		local rowsN = math.ceil(n / 2)
+		f.Size = UDim2.new(1, 0, 0, 62 + rowsN * 44)
+	end
+	relayoutHeight()
+
+	local function fmtUptime()
+		local s = math.floor(os.clock() - S._t0)
+		local h, m = math.floor(s / 3600), math.floor((s % 3600) / 60)
+		if h > 0 then return string.format("%dh %02dm", h, m) end
+		return string.format("%dm %02ds", m, s % 60)
+	end
+	task.spawn(function()
+		while not Library.Unloaded and f.Parent do
+			ensureCustom()
+			relayoutHeight()
+			local ping = ""
+			pcall(function() ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValueString():match("^(%d+)") or "" end)
+			for _, t in ipairs(tiles) do
+				local k = t.key
+				if k == "uptime" then t.value.Text = fmtUptime()
+				elseif k == "ping" then t.value.Text = (ping ~= "" and ping .. " ms") or "-"
+				elseif k == "joins" then t.value.Text = tostring(S.joins)
+				elseif k == "leaves" then t.value.Text = tostring(S.leaves)
+				elseif k == "deaths" then t.value.Text = tostring(S.deaths)
+				elseif k == "players" then t.value.Text = tostring(#Players:GetPlayers())
+				elseif string.sub(k, 1, 7) == "custom:" then t.value.Text = tostring(S._custom[string.sub(k, 8)] or 0) end
+			end
+			fpsNow.Text = tostring(S._fps) .. " fps"
+			fpsRange.Text = string.format("avg %d   min %d   max %d", S.fpsAvg, S.fpsMin == 999 and 0 or S.fpsMin, S.fpsMax)
+			local samples = S._samples
+			local n = #samples
+			local mx = 1
+			for _, v in ipairs(samples) do if v > mx then mx = v end end
+			for i = 1, BARS do
+				local idx = n - BARS + i
+				local v = samples[idx]
+				local h = v and math.max(2, math.floor((v / mx) * 44)) or 2
+				Tween(bars[i], { Size = UDim2.new(1 / BARS, -1, 0, h) }, 0.25)
+			end
+			task.wait(1)
+		end
+	end)
+	return { Frame = f }
 end
 
 Library._onUnload = {}
