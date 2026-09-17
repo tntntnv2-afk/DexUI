@@ -1816,7 +1816,8 @@ function GroupboxMethods:AddESPPreview(cfg)
 		glowParts = {}
 		for _, d in ipairs(m:GetDescendants()) do
 			if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" and d.Transparency < 1 then
-				for _, spec in ipairs({ { 1.06, 0.12, 0.0 }, { 1.16, 0.3, 0.72 } }) do
+				local pad = cfg.OutlineThickness or 0.035
+				for _, spec in ipairs({ { 1.0, pad, 0.0 } }) do
 					local shell
 					if d:IsA("MeshPart") then
 						shell = d:Clone()
@@ -2613,4 +2614,247 @@ return SaveManager
 
 end)()
 
-return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager }
+local Cosmetics = (function()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+local Cosmetics = { Library = nil, On = {}, Colour = {}, Alpha = {}, Rainbow = false, CharAlpha = 0, _conn = nil, _items = {}, _folder = nil }
+
+local DEFAULTS = {
+	Halo = { colour = Color3.fromRGB(255, 215, 110), alpha = 0 },
+	Wings = { colour = Color3.fromRGB(240, 240, 255), alpha = 0.15 },
+	Circle = { colour = Color3.fromRGB(214, 40, 48), alpha = 0 },
+	Field = { colour = Color3.fromRGB(214, 40, 48), alpha = 0.55 },
+}
+for k, v in pairs(DEFAULTS) do Cosmetics.Colour[k] = v.colour Cosmetics.Alpha[k] = v.alpha Cosmetics.On[k] = false end
+
+local function getChar()
+	local ch = LocalPlayer.Character
+	if not ch then return nil end
+	local hrp = ch:FindFirstChild("HumanoidRootPart")
+	local head = ch:FindFirstChild("Head")
+	local torso = ch:FindFirstChild("UpperTorso") or ch:FindFirstChild("Torso")
+	return ch, hrp, head, torso
+end
+
+function Cosmetics:SetLibrary(lib) self.Library = lib end
+
+function Cosmetics:_folderRef()
+	if self._folder and self._folder.Parent then return self._folder end
+	self._folder = Instance.new("Folder")
+	self._folder.Name = "_dexoriCosmetics"
+	self._folder.Parent = Workspace
+	return self._folder
+end
+
+local function part(props)
+	local p = Instance.new("Part")
+	p.Anchored = true
+	p.CanCollide = false
+	p.CanQuery = false
+	p.CanTouch = false
+	p.CastShadow = false
+	p.Material = Enum.Material.Neon
+	p.TopSurface = Enum.SurfaceType.Smooth
+	p.BottomSurface = Enum.SurfaceType.Smooth
+	for k, v in pairs(props) do p[k] = v end
+	return p
+end
+
+function Cosmetics:_buildHalo()
+	local f = self:_folderRef()
+	local segs = {}
+	local N, R = 28, 1.15
+	for i = 1, N do
+		local a = (i / N) * math.pi * 2
+		local s = part({ Name = "_halo", Size = Vector3.new(0.34, 0.11, 0.11), Parent = f })
+		segs[i] = { p = s, a = a }
+	end
+	local _ = R
+	return { kind = "Halo", segs = segs, radius = R }
+end
+
+function Cosmetics:_buildWings()
+	local f = self:_folderRef()
+	local feathers = {}
+	local spec = { { 3.2, 0.7, 8 }, { 2.9, 0.62, 24 }, { 2.5, 0.55, 42 }, { 2.0, 0.48, 60 }, { 1.5, 0.4, 78 } }
+	for side = -1, 1, 2 do
+		for i, s in ipairs(spec) do
+			local p = part({ Name = "_wing", Size = Vector3.new(s[1], 0.08, s[2]), Parent = f })
+			feathers[#feathers + 1] = { p = p, side = side, len = s[1], angle = math.rad(s[3]), idx = i }
+		end
+	end
+	return { kind = "Wings", feathers = feathers }
+end
+
+function Cosmetics:_buildCircle()
+	local f = self:_folderRef()
+	local rings = {}
+	for _, r in ipairs({ 3.2, 2.35 }) do
+		local N = math.floor(r * 12)
+		local segs = {}
+		for i = 1, N do
+			local a = (i / N) * math.pi * 2
+			segs[i] = { p = part({ Name = "_circle", Size = Vector3.new((2 * math.pi * r) / N * 1.05, 0.05, 0.12), Parent = f }), a = a }
+		end
+		rings[#rings + 1] = { segs = segs, r = r }
+	end
+	local spokes = {}
+	for i = 1, 6 do
+		spokes[i] = { p = part({ Name = "_circle", Size = Vector3.new(2.35 * math.sqrt(3), 0.05, 0.09), Parent = f }), a = math.rad(i * 60) }
+	end
+	return { kind = "Circle", rings = rings, spokes = spokes }
+end
+
+function Cosmetics:_buildField()
+	local f = self:_folderRef()
+	local ball = part({ Name = "_field", Shape = Enum.PartType.Ball, Size = Vector3.new(9, 9, 9), Material = Enum.Material.ForceField, Parent = f })
+	return { kind = "Field", ball = ball }
+end
+
+function Cosmetics:_update(dt)
+	local ch, hrp, head, torso = getChar()
+	if not (ch and hrp) then return end
+	local t = os.clock()
+	local rainbow = self.Rainbow and Color3.fromHSV((t * 0.15) % 1, 0.85, 1) or nil
+
+	for kind, item in pairs(self._items) do
+		local colour = rainbow or self.Colour[kind]
+		local alpha = self.Alpha[kind]
+		if kind == "Halo" and head then
+			local centre = head.CFrame * CFrame.new(0, 1.05 + math.sin(t * 1.4) * 0.06, 0)
+			local spin = t * 0.8
+			for _, s in ipairs(item.segs) do
+				local a = s.a + spin
+				s.p.CFrame = centre * CFrame.Angles(0, a, 0) * CFrame.new(item.radius, 0, 0) * CFrame.Angles(0, math.rad(90), 0)
+				s.p.Color = colour s.p.Transparency = alpha
+			end
+		elseif kind == "Wings" and torso then
+			local base = torso.CFrame * CFrame.new(0, 0.4, 0.55)
+			local flap = math.sin(t * 2.2) * math.rad(14)
+			for _, fe in ipairs(item.feathers) do
+				local sweep = fe.angle + flap * (1 - fe.idx * 0.12)
+				local cf = base * CFrame.Angles(0, math.rad(fe.side * 22), 0) * CFrame.Angles(0, 0, fe.side * sweep) * CFrame.new(fe.side * fe.len * 0.5, 0, 0)
+				fe.p.CFrame = cf
+				fe.p.Color = colour fe.p.Transparency = alpha
+			end
+		elseif kind == "Circle" then
+			local hum = ch:FindFirstChildOfClass("Humanoid")
+			local hip = hum and hum.HipHeight or 2
+			local floor = hrp.CFrame * CFrame.new(0, -(hip + hrp.Size.Y * 0.5) + 0.06, 0)
+			floor = CFrame.new(floor.Position)
+			for ri, ring in ipairs(item.rings) do
+				local spin = t * (ri == 1 and 0.6 or -0.9)
+				for _, s in ipairs(ring.segs) do
+					local a = s.a + spin
+					s.p.CFrame = floor * CFrame.Angles(0, a, 0) * CFrame.new(0, 0, ring.r) * CFrame.Angles(0, math.rad(90), 0)
+					s.p.Color = colour s.p.Transparency = alpha
+				end
+			end
+			for _, sp in ipairs(item.spokes) do
+				sp.p.CFrame = floor * CFrame.Angles(0, sp.a - t * 0.9, 0) * CFrame.new(0, 0, 2.35 * 0.5)
+				sp.p.Color = colour sp.p.Transparency = alpha
+			end
+		elseif kind == "Field" then
+			local s = 9 + math.sin(t * 1.6) * 0.25
+			item.ball.Size = Vector3.new(s, s, s)
+			item.ball.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, t * 0.3, 0)
+			item.ball.Color = colour item.ball.Transparency = alpha
+		end
+	end
+
+	if self.CharAlpha > 0 then
+		for _, d in ipairs(ch:GetDescendants()) do
+			if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" then d.LocalTransparencyModifier = self.CharAlpha
+			elseif d:IsA("Decal") then d.Transparency = self.CharAlpha end
+		end
+	end
+end
+
+function Cosmetics:_ensureLoop()
+	if self._conn then return end
+	self._conn = RunService.RenderStepped:Connect(function(dt) pcall(function() self:_update(dt) end) end)
+end
+
+function Cosmetics:_destroyItem(kind)
+	local item = self._items[kind]
+	if not item then return end
+	local function kill(p) pcall(function() p:Destroy() end) end
+	if item.segs then for _, s in ipairs(item.segs) do kill(s.p) end end
+	if item.feathers then for _, fe in ipairs(item.feathers) do kill(fe.p) end end
+	if item.rings then for _, r in ipairs(item.rings) do for _, s in ipairs(r.segs) do kill(s.p) end end end
+	if item.spokes then for _, s in ipairs(item.spokes) do kill(s.p) end end
+	if item.ball then kill(item.ball) end
+	self._items[kind] = nil
+end
+
+function Cosmetics:Set(kind, on)
+	self.On[kind] = on and true or false
+	self:_destroyItem(kind)
+	if on then
+		if kind == "Halo" then self._items[kind] = self:_buildHalo()
+		elseif kind == "Wings" then self._items[kind] = self:_buildWings()
+		elseif kind == "Circle" then self._items[kind] = self:_buildCircle()
+		elseif kind == "Field" then self._items[kind] = self:_buildField() end
+		self:_ensureLoop()
+	end
+end
+
+function Cosmetics:SetCharacterAlpha(a)
+	self.CharAlpha = math.clamp(a or 0, 0, 1)
+	if self.CharAlpha == 0 then
+		local ch = LocalPlayer.Character
+		if ch then
+			for _, d in ipairs(ch:GetDescendants()) do
+				if d:IsA("BasePart") then d.LocalTransparencyModifier = 0 elseif d:IsA("Decal") then d.Transparency = 0 end
+			end
+		end
+	else
+		self:_ensureLoop()
+	end
+end
+
+function Cosmetics:Rebuild()
+	for kind, on in pairs(self.On) do if on then self:Set(kind, true) end end
+end
+
+function Cosmetics:Stop()
+	for kind in pairs(self._items) do self:_destroyItem(kind) end
+	self:SetCharacterAlpha(0)
+	if self._conn then self._conn:Disconnect() self._conn = nil end
+	if self._folder then pcall(function() self._folder:Destroy() end) self._folder = nil end
+end
+
+function Cosmetics:BuildTab(tab)
+	local Library = self.Library
+	local left = tab:AddLeftGroupbox("Cosmetics")
+	local labels = { Halo = "halo", Wings = "angel wings", Circle = "magic circle", Field = "force field" }
+	for _, kind in ipairs({ "Halo", "Wings", "Circle", "Field" }) do
+		left:AddToggle("Cosm_" .. kind, { Text = labels[kind], Default = false, Callback = function(v) self:Set(kind, v) end })
+			:AddColorPicker("Cosm_" .. kind .. "_Colour", { Default = self.Colour[kind], Title = labels[kind] .. " colour", Callback = function(c) self.Colour[kind] = c end })
+		left:AddSlider("Cosm_" .. kind .. "_Alpha", { Text = labels[kind] .. " transparency", Default = self.Alpha[kind], Min = 0, Max = 0.95, Rounding = 2, Callback = function(v) self.Alpha[kind] = v end })
+	end
+	local right = tab:AddRightGroupbox("Character")
+	right:AddSlider("Cosm_CharAlpha", { Text = "character transparency", Default = 0, Min = 0, Max = 1, Rounding = 2, Callback = function(v) self:SetCharacterAlpha(v) end })
+	right:AddToggle("Cosm_Rainbow", { Text = "rainbow cycle (all cosmetics)", Default = false, Callback = function(v) self.Rainbow = v end })
+	right:AddButton({ Text = "clear everything", Risky = true, Func = function()
+		for _, kind in ipairs({ "Halo", "Wings", "Circle", "Field" }) do
+			local t = Library.Toggles["Cosm_" .. kind]
+			if t then t:SetValue(false) end
+		end
+		local s = Library.Options.Cosm_CharAlpha
+		if s then s:SetValue(0) end
+	end })
+	right:AddLabel("everything here is client side. only you can see it.", true)
+
+	LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5) self:Rebuild() end)
+	Library:OnUnload(function() self:Stop() end)
+end
+
+return Cosmetics
+
+end)()
+
+return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager, Cosmetics = Cosmetics }
