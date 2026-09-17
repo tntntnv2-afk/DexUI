@@ -1773,262 +1773,184 @@ end
 function GroupboxMethods:AddESPPreview(cfg)
 	cfg = cfg or {}
 	local tabsCfg = cfg.Tabs or { "Enemy", "Team" }
-	local f = row(self, 244, true)
+	local CANVAS_H = cfg.Height or 232
+	local f = row(self, CANVAS_H + 26, true)
+
+	-- segmented tabs
 	local tabBar = Create("Frame", { Size = UDim2.new(0, 0, 0, 20), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, ZIndex = 5, Parent = f })
-	Corner(tabBar, 7); local tbs = Stroke(tabBar, "Outline")
-	Pad(tabBar, 2, 2, 2, 2)
+	Corner(tabBar, 7); Stroke(tabBar, "Outline"); Pad(tabBar, 2, 2, 2, 2)
 	Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = tabBar })
-	local canvas = Create("Frame", { Size = UDim2.new(1, 0, 0, 220), Position = UDim2.new(0, 0, 0, 24), ClipsDescendants = true, ZIndex = 5, Parent = f })
+
+	-- canvas: black field with a fine grid
+	local canvas = Create("Frame", { Size = UDim2.new(1, 0, 0, CANVAS_H), Position = UDim2.new(0, 0, 0, 26), ClipsDescendants = true, ZIndex = 5, Parent = f })
 	Library:AddToRegistry(canvas, { BackgroundColor3 = "Well" }); Corner(canvas, 10); Stroke(canvas, "Outline")
 	do
-		local glow = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1.4, 0, 0.5, 0), Position = UDim2.new(0.5, 0, 1, 30), BackgroundTransparency = 0.94, BorderSizePixel = 0, ZIndex = 5, Parent = canvas })
-		Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = glow })
-		Library:AddToRegistry(glow, { BackgroundColor3 = "Accent" })
-		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.2) }), Parent = glow })
+		local grid = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 5, Parent = canvas })
+		for i = 1, 14 do
+			local v = Create("Frame", { Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(i / 15, 0, 0, 0), BackgroundTransparency = 0.92, BorderSizePixel = 0, ZIndex = 5, Parent = grid })
+			Library:AddToRegistry(v, { BackgroundColor3 = "FontDim" })
+		end
+		for i = 1, 8 do
+			local h = Create("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, i / 9, 0), BackgroundTransparency = 0.92, BorderSizePixel = 0, ZIndex = 5, Parent = grid })
+			Library:AddToRegistry(h, { BackgroundColor3 = "FontDim" })
+		end
+		local floorGlow = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0.7, 0, 0, 60), Position = UDim2.new(0.5, 0, 1, 20), BackgroundTransparency = 0.92, BorderSizePixel = 0, ZIndex = 5, Parent = canvas })
+		Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = floorGlow })
+		Library:AddToRegistry(floorGlow, { BackgroundColor3 = "Accent" })
+		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.3) }), Parent = floorGlow })
+	end
 
+	-- ---------------------------------------------------------------- figure (2D, crisp)
+	-- all geometry in a 64 x 140 body box centred in the canvas; joint map is exact, so overlays never drift
+	local BW, BH = 64, 140
+	local body = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(BW, BH), Position = UDim2.new(0.5, 0, 0.5, 6), BackgroundTransparency = 1, ZIndex = 6, Parent = canvas })
+	local skin = Color3.fromRGB(34, 34, 38)
+	local function limb(w, h, x, y, r)
+		local l = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(w, h), Position = UDim2.fromOffset(x, y), BackgroundColor3 = skin, BorderSizePixel = 0, ZIndex = 6, Parent = body })
+		Corner(l, r or 4)
+		local s = Create("UIStroke", { Thickness = 1, Transparency = 0.55, Parent = l })
+		Library:AddToRegistry(s, { Color = "Outline" })
+		return l
 	end
-	local vp = Create("ViewportFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Ambient = Color3.fromRGB(120, 120, 130), LightColor = Color3.fromRGB(255, 255, 255), LightDirection = Vector3.new(-1, -1.5, -1), ZIndex = 6, Parent = canvas })
-	local wm = Create("WorldModel", { Parent = vp })
-	local cam = Create("Camera", { FieldOfView = 40, Parent = vp })
-	vp.CurrentCamera = cam
-	vp.Ambient = Color3.fromRGB(150, 150, 160)
-	vp.LightColor = Color3.fromRGB(255, 255, 255)
-	vp.LightDirection = Vector3.new(-0.3, -1, -0.5)
-	-- stage: a thin dark disc under the feet with a hairline-thin accent edge
-	local stage = Create("Part", { Name = "_stage", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.12, 5.2, 5.2), CFrame = CFrame.new(0, -3.06, 0) * CFrame.Angles(0, 0, math.rad(90)), Anchored = true, Color = Color3.fromRGB(28, 28, 32), Material = Enum.Material.SmoothPlastic, Parent = wm })
-	local rim = Create("Part", { Name = "_rim", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 5.3, 5.3), CFrame = CFrame.new(0, -3.07, 0) * CFrame.Angles(0, 0, math.rad(90)), Anchored = true, Material = Enum.Material.SmoothPlastic, Parent = wm })
-	Library:AddToRegistry(rim, { Color = "Accent" })
-	local dummy = nil
-	pcall(function()
-		local ok, m = pcall(function() return Players:CreateHumanoidModelFromUserId(LocalPlayer.UserId) end)
-		if not ok or not m then m = Players:CreateHumanoidModelFromDescription(Instance.new("HumanoidDescription"), Enum.HumanoidRigType.R15) end
-		m.Parent = wm
-		local hum = m:FindFirstChildOfClass("Humanoid")
-		if hum then hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
-		m:PivotTo(CFrame.new(0, 0, 0))
-		dummy = m
-		task.defer(function()
-			pcall(function()
-				local h = m:FindFirstChildOfClass("Humanoid")
-				if not h then return end
-				local animator = h:FindFirstChildOfClass("Animator") or Instance.new("Animator", h)
-				local anim = Instance.new("Animation")
-				anim.AnimationId = h.RigType == Enum.HumanoidRigType.R6 and "rbxassetid://180435571" or "rbxassetid://507766666"
-				local track = animator:LoadAnimation(anim)
-				track.Looped = true
-				track:Play()
-			end)
-		end)
-	end)
-	if not dummy then
-		dummy = Instance.new("Model")
-		for _, spec in ipairs({ { "Head", Vector3.new(1.2, 1.2, 1.2), Vector3.new(0, 1.6, 0) }, { "Torso", Vector3.new(2, 2, 1), Vector3.new(0, 0, 0) }, { "LA", Vector3.new(1, 2, 1), Vector3.new(-1.5, 0, 0) }, { "RA", Vector3.new(1, 2, 1), Vector3.new(1.5, 0, 0) }, { "LL", Vector3.new(1, 2, 1), Vector3.new(-0.5, -2, 0) }, { "RL", Vector3.new(1, 2, 1), Vector3.new(0.5, -2, 0) } }) do
-			Create("Part", { Name = spec[1], Size = spec[2], CFrame = CFrame.new(spec[3]), Anchored = true, Color = Color3.fromRGB(90, 90, 100), Material = Enum.Material.SmoothPlastic, Parent = dummy })
-		end
-		dummy.Parent = wm
-	end
-	local preview = { Frame = f, Tabs = {}, Active = nil, _tracked = {} }
-	local angle = 0
-	local dist = 7
-	canvas.Active = true
-	canvas.InputChanged:Connect(function(inp)
-		if inp.UserInputType == Enum.UserInputType.MouseWheel then
-			dist = math.clamp(dist - inp.Position.Z * 1.2, 3.5, 22)
+	limb(22, 22, 32, 0, 11)          -- head
+	limb(30, 46, 32, 26, 6)          -- torso
+	limb(10, 42, 12, 27, 5)          -- left arm
+	limb(10, 42, 52, 27, 5)          -- right arm
+	limb(13, 62, 24, 74, 5)          -- left leg
+	limb(13, 62, 40, 74, 5)          -- right leg
+	local joints = {
+		head = Vector2.new(32, 11), neck = Vector2.new(32, 24), chest = Vector2.new(32, 40), hip = Vector2.new(32, 72),
+		lsh = Vector2.new(17, 30), lel = Vector2.new(13, 50), lha = Vector2.new(12, 69),
+		rsh = Vector2.new(47, 30), rel = Vector2.new(51, 50), rha = Vector2.new(52, 69),
+		lhp = Vector2.new(25, 76), lkn = Vector2.new(24, 106), lft = Vector2.new(24, 134),
+		rhp = Vector2.new(39, 76), rkn = Vector2.new(40, 106), rft = Vector2.new(40, 134),
+	}
+	local bones = { { "head", "neck" }, { "neck", "chest" }, { "chest", "hip" }, { "neck", "lsh" }, { "lsh", "lel" }, { "lel", "lha" }, { "neck", "rsh" }, { "rsh", "rel" }, { "rel", "rha" }, { "hip", "lhp" }, { "lhp", "lkn" }, { "lkn", "lft" }, { "hip", "rhp" }, { "rhp", "rkn" }, { "rkn", "rft" } }
+
+	-- idle bob
+	task.spawn(function()
+		local t = 0
+		while not Library.Unloaded and body.Parent do
+			t = t + task.wait(0.03)
+			body.Position = UDim2.new(0.5, 0, 0.5, 6 + math.sin(t * 1.6) * 2)
 		end
 	end)
-	local popBtn = Create("TextButton", { Size = UDim2.fromOffset(24, 24), Position = UDim2.new(1, -32, 0, 8), Text = "", AutoButtonColor = false, ZIndex = 13, Parent = canvas })
-	Corner(popBtn, 8); popBtn.BackgroundTransparency = 0.4; Library:AddToRegistry(popBtn, { BackgroundColor3 = "Main" }); Stroke(popBtn, "Outline")
-	do
-		local a = Create("Frame", { Size = UDim2.fromOffset(9, 7), Position = UDim2.new(0.5, -6, 0.5, -5), BackgroundTransparency = 1, ZIndex = 14, Parent = popBtn })
-		local s1 = Create("UIStroke", { Thickness = 1, Parent = a }); Library:AddToRegistry(s1, { Color = "FontDim" })
-		local b = Create("Frame", { Size = UDim2.fromOffset(9, 7), Position = UDim2.new(0.5, -2, 0.5, -1), BackgroundTransparency = 1, ZIndex = 15, Parent = popBtn })
-		local s2 = Create("UIStroke", { Thickness = 1, Parent = b }); Library:AddToRegistry(s2, { Color = "Accent" })
-	end
-	local floating = nil
-	popBtn.MouseButton1Click:Connect(function()
-		if floating then
-			canvas.Parent = f
-			canvas.Position = UDim2.new(0, 0, 0, 24)
-			canvas.Size = UDim2.new(1, 0, 0, 220)
-			if floating._shadow then floating._shadow:Destroy() end
-			floating.Frame:Destroy()
-			floating = nil
-			return
-		end
-		local win = Create("Frame", { Size = UDim2.fromOffset(380, 340), Position = UDim2.new(0.5, -190, 0.5, -170), BackgroundTransparency = 0.05, ZIndex = 400, Parent = PopupLayer })
-		Library:AddToRegistry(win, { BackgroundColor3 = "Main" })
-		Corner(win, 14)
-		local wst = Create("UIStroke", { Thickness = 1, Transparency = 0.15, Parent = win }); Library:AddToRegistry(wst, { Color = "Outline" })
-		local wedge = Create("UIStroke", { Thickness = 1, Transparency = 0.65, Parent = win }); Library:AddToRegistry(wedge, { Color = "Accent" })
-		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.2, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = wedge })
-		local winShadow = Shadow(win, 12)
-		local bar = Create("TextButton", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 401, Parent = win })
-		local tl = Text(bar, "esp preview", 12, true); tl.Position = UDim2.new(0, 12, 0, 0); tl.Size = UDim2.new(1, -40, 1, 0); tl.ZIndex = 402
-		Draggable(bar, win)
-		canvas.Parent = win
-		canvas.Position = UDim2.new(0, 10, 0, 34)
-		canvas.Size = UDim2.new(1, -20, 1, -44)
-		floating = { Frame = win, _shadow = winShadow }
-	end)
-	local zoomBox = Create("Frame", { Size = UDim2.fromOffset(26, 52), Position = UDim2.new(1, -34, 1, -60), BackgroundTransparency = 1, ZIndex = 12, Parent = canvas })
-	Create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = zoomBox })
-	for i, spec in ipairs({ { "+", -2 }, { "-", 2 } }) do
-		local zb = Create("TextButton", { Size = UDim2.fromOffset(24, 24), Text = spec[1], TextSize = 14, FontFace = Library.FontFaceBold, AutoButtonColor = false, LayoutOrder = i, ZIndex = 13, Parent = zoomBox })
-		Corner(zb, 8); zb.BackgroundTransparency = 0.4; Library:AddToRegistry(zb, { BackgroundColor3 = "Main", TextColor3 = "FontDim" }); Stroke(zb, "Outline")
-		zb.MouseButton1Click:Connect(function() dist = math.clamp(dist + spec[2], 3.5, 22) end)
-	end
-	local function project(world)
-		local rel = cam.CFrame:PointToObjectSpace(world)
-		if rel.Z > -0.05 then return nil end
-		local sz = canvas.AbsoluteSize
-		if sz.X < 1 or sz.Y < 1 then return nil end
-		local tanHalf = math.tan(math.rad(cam.FieldOfView) * 0.5)
-		local px = (rel.X / -rel.Z) / (tanHalf * (sz.X / sz.Y))
-		local py = (rel.Y / -rel.Z) / tanHalf
-		return Vector2.new((px * 0.5 + 0.5) * sz.X, (0.5 - py * 0.5) * sz.Y)
-	end
-	local spin = Library:GiveSignal(RunService.RenderStepped:Connect(function(dt)
-		if not canvas.Visible or not f:IsDescendantOf(ScreenGui) then return end
-		angle = angle + dt * 0.35
-		local boxCf, extents = dummy:GetBoundingBox()
-		local pivot = boxCf.Position
-		cam.CFrame = CFrame.new(pivot + Vector3.new(math.sin(angle) * dist, dist * 0.12, math.cos(angle) * dist), pivot + Vector3.new(0, -0.2, 0))
-		local hx, hy, hz = extents.X * 0.5, extents.Y * 0.5, extents.Z * 0.5
-		local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
-		for i = 0, 7 do
-			local c = boxCf * CFrame.new((i % 2 == 0) and -hx or hx, (math.floor(i / 2) % 2 == 0) and -hy or hy, (i < 4) and -hz or hz)
-			local p = project(c.Position)
-			if not p then return end
-			if p.X < minX then minX = p.X end
-			if p.Y < minY then minY = p.Y end
-			if p.X > maxX then maxX = p.X end
-			if p.Y > maxY then maxY = p.Y end
-		end
-		local w, h = maxX - minX, maxY - minY
-		local cx, cy = minX + w * 0.5, minY + h * 0.5
-		for _, t in ipairs(preview._tracked) do
-			if t.Page.Visible then
-				local P = t.Parts
-				P.Box.Size = UDim2.fromOffset(math.floor(w + 0.5), math.floor(h + 0.5))
-				P.Box.Position = UDim2.fromOffset(math.floor(cx + 0.5), math.floor(cy + 0.5))
-				local top = math.floor(minY) - 6
-				P.Name.Position = UDim2.fromOffset(math.floor(cx + 0.5), top - 17)
-				P.Distance.Position = UDim2.fromOffset(math.floor(cx + 0.5), top - 4)
-				P.HealthBg.Position = UDim2.fromOffset(math.floor(cx + 0.5), top)
-				P.Weapon.Position = UDim2.fromOffset(math.floor(cx + 0.5), math.floor(maxY) + 4)
-				local ox, oy = canvas.AbsoluteSize.X * 0.5, canvas.AbsoluteSize.Y
-				local dx, dy = cx - ox, maxY - oy
-				local len = math.sqrt(dx * dx + dy * dy)
-				P.Tracer.Size = UDim2.fromOffset(1, math.floor(len + 0.5))
-				P.Tracer.Position = UDim2.fromOffset(math.floor(ox), math.floor(oy))
-				P.Tracer.Rotation = -math.deg(math.atan2(dx, -dy))
-				-- corner box
-				P.Corners.Size = UDim2.fromOffset(math.floor(w + 0.5), math.floor(h + 0.5))
-				P.Corners.Position = UDim2.fromOffset(math.floor(cx + 0.5), math.floor(cy + 0.5))
-				local arm = math.max(6, math.floor(math.min(w, h) * 0.22))
-				local cb = t._cornerBars
-				cb[1].Position = UDim2.fromOffset(0, 0) cb[1].Size = UDim2.fromOffset(arm, 1.5)
-				cb[2].Position = UDim2.fromOffset(0, 0) cb[2].Size = UDim2.fromOffset(1.5, arm)
-				cb[3].Position = UDim2.new(1, -arm, 0, 0) cb[3].Size = UDim2.fromOffset(arm, 1.5)
-				cb[4].Position = UDim2.new(1, -1.5, 0, 0) cb[4].Size = UDim2.fromOffset(1.5, arm)
-				cb[5].Position = UDim2.new(0, 0, 1, -1.5) cb[5].Size = UDim2.fromOffset(arm, 1.5)
-				cb[6].Position = UDim2.new(0, 0, 1, -arm) cb[6].Size = UDim2.fromOffset(1.5, arm)
-				cb[7].Position = UDim2.new(1, -arm, 1, -1.5) cb[7].Size = UDim2.fromOffset(arm, 1.5)
-				cb[8].Position = UDim2.new(1, -1.5, 1, -arm) cb[8].Size = UDim2.fromOffset(1.5, arm)
-				-- skeleton
-				if P.Skeleton.Visible then
-					local bones = dummy:FindFirstChild("UpperTorso") and {
-						{ "Head", "UpperTorso" }, { "UpperTorso", "LowerTorso" },
-						{ "UpperTorso", "LeftUpperArm" }, { "LeftUpperArm", "LeftLowerArm" }, { "LeftLowerArm", "LeftHand" },
-						{ "UpperTorso", "RightUpperArm" }, { "RightUpperArm", "RightLowerArm" }, { "RightLowerArm", "RightHand" },
-						{ "LowerTorso", "LeftUpperLeg" }, { "LeftUpperLeg", "LeftLowerLeg" }, { "LeftLowerLeg", "LeftFoot" },
-						{ "LowerTorso", "RightUpperLeg" }, { "RightUpperLeg", "RightLowerLeg" }, { "RightLowerLeg", "RightFoot" },
-					} or {
-						{ "Head", "Torso" }, { "Torso", "Left Arm" }, { "Torso", "Right Arm" }, { "Torso", "Left Leg" }, { "Torso", "Right Leg" },
-					}
-					for bi, pair in ipairs(bones) do
-						local ln = t._skelLines[bi]
-						if not ln then
-							ln = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(1, 1.5), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 9, Parent = P.Skeleton })
-							t._skelLines[bi] = ln
-						end
-						local pa, pb = dummy:FindFirstChild(pair[1]), dummy:FindFirstChild(pair[2])
-						local a2 = pa and project(pa.Position)
-						local b2 = pb and project(pb.Position)
-						if a2 and b2 then
-							local ddx, ddy = b2.X - a2.X, b2.Y - a2.Y
-							ln.Visible = true
-							ln.Position = UDim2.fromOffset((a2.X + b2.X) * 0.5, (a2.Y + b2.Y) * 0.5)
-							ln.Size = UDim2.fromOffset(math.max(1, math.sqrt(ddx * ddx + ddy * ddy)), 1.5)
-							ln.Rotation = math.deg(math.atan2(ddy, ddx))
-						else
-							ln.Visible = false
-						end
-					end
-				end
-			end
-		end
-	end))
+
+	local preview = { Frame = f, Tabs = {}, Active = nil, Canvas = canvas }
+
 	for i, name in ipairs(tabsCfg) do
-		local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 7, Parent = canvas })
-		local box = Create("Frame", { Size = UDim2.new(0, 64, 0, 132), Position = UDim2.new(0.5, -32, 0.5, -66), BackgroundTransparency = 1, ZIndex = 8, Parent = page })
-		box.AnchorPoint = Vector2.new(0.5, 0.5)
-		local boxStroke = Create("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 1, Parent = box })
-
-		local nameL = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 160, 0, 14), Position = UDim2.new(0.5, 0, 0.5, -80), BackgroundTransparency = 1, Text = "player", TextSize = 13, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(255, 255, 255), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, ZIndex = 9, Parent = page })
-		local distL = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 160, 0, 12), Position = UDim2.new(0.5, 0, 0.5, -66), BackgroundTransparency = 1, Text = "[42] 180/250", TextSize = 11, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(220, 220, 220), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, ZIndex = 9, Parent = page })
-		local weapon = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.new(0, 160, 0, 12), Position = UDim2.new(0.5, 0, 0.5, 74), BackgroundTransparency = 1, Text = "weapon", TextSize = 11, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(220, 220, 220), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, Visible = false, ZIndex = 9, Parent = page })
-		local hpBg = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.new(0, 60, 0, 3), Position = UDim2.new(0.5, 0, 0.5, -52), BackgroundColor3 = Color3.fromRGB(0, 0, 0), BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(0, 0, 0), ZIndex = 9, Parent = page })
-		local hp = Create("Frame", { Size = UDim2.fromScale(0.72, 1), BackgroundColor3 = Color3.fromRGB(71, 255, 0), BorderSizePixel = 0, ZIndex = 10, Parent = hpBg })
-		local tracer = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 1, 0, 70), Position = UDim2.new(0.5, 0, 1, 0), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, Visible = false, ZIndex = 8, Parent = page })
-		local corners = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(64, 132), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 8, Parent = page })
+		local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 8, Parent = canvas })
+		local PAD = 6
+		-- box (full)
+		local box = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(BW + PAD * 2, BH + PAD * 2), BackgroundTransparency = 1, ZIndex = 9, Parent = page })
+		local boxShadow = Create("UIStroke", { Thickness = 3, Color = Color3.new(0, 0, 0), Transparency = 0.6, Parent = box })
+		local boxStroke = Create("UIStroke", { Thickness = 1.5, Color = Color3.fromRGB(255, 60, 60), Parent = box })
+		-- box (corners)
+		local corners = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(BW + PAD * 2, BH + PAD * 2), BackgroundTransparency = 1, Visible = false, ZIndex = 9, Parent = page })
 		local cornerBars = {}
-		for ci = 1, 8 do
-			local bar = Create("Frame", { BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 9, Parent = corners })
-			cornerBars[ci] = bar
+		for ci = 1, 8 do cornerBars[ci] = Create("Frame", { BackgroundColor3 = Color3.fromRGB(255, 60, 60), BorderSizePixel = 0, ZIndex = 10, Parent = corners }) end
+		-- text
+		local function esptext(sz, bold)
+			local t = Create("TextLabel", { BackgroundTransparency = 1, TextSize = sz, FontFace = bold and Library.FontFaceBold or Library.FontFace, TextColor3 = Color3.new(1, 1, 1), TextStrokeColor3 = Color3.new(0, 0, 0), TextStrokeTransparency = 0.15, ZIndex = 11, Parent = page })
+			return t
 		end
-		local skel = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 8, Parent = page })
+		local nameL = esptext(12, true); nameL.AnchorPoint = Vector2.new(0.5, 1); nameL.Size = UDim2.new(0, 160, 0, 14); nameL.Text = "player"
+		local distL = esptext(10, false); distL.AnchorPoint = Vector2.new(0.5, 0); distL.Size = UDim2.new(0, 160, 0, 12); distL.Text = "[42] 180/250"
+		local weapon = esptext(10, false); weapon.AnchorPoint = Vector2.new(0.5, 0); weapon.Size = UDim2.new(0, 160, 0, 12); weapon.Text = "weapon"; weapon.Visible = false
+		-- health bar (vertical, left of box)
+		local hpBg = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(3, BH + PAD * 2), BackgroundColor3 = Color3.new(0, 0, 0), BorderSizePixel = 0, ZIndex = 9, Parent = page })
+		Create("UIStroke", { Thickness = 1, Color = Color3.new(0, 0, 0), Transparency = 0.4, Parent = hpBg })
+		local hp = Create("Frame", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0.72, 0), Position = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(80, 230, 90), BorderSizePixel = 0, ZIndex = 10, Parent = hpBg })
+		-- tracer
+		local tracer = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(1, 60), BackgroundColor3 = Color3.fromRGB(255, 60, 60), BorderSizePixel = 0, Visible = false, ZIndex = 8, Parent = page })
+		-- skeleton
+		local skel = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 10, Parent = page })
 		local skelLines = {}
-		local tab = { Name = name, Page = page, Parts = { Box = box, BoxStroke = boxStroke, Name = nameL, Distance = distL, HealthBg = hpBg, Health = hp, Tracer = tracer, Weapon = weapon, Corners = corners, Skeleton = skel }, _cornerBars = cornerBars, _skelLines = skelLines, BoxStyle = "full" }
+		for bi = 1, #bones do
+			skelLines[bi] = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Color3.fromRGB(255, 60, 60), BorderSizePixel = 0, ZIndex = 10, Parent = skel })
+		end
+		local joint = {}
+		for jn in pairs(joints) do
+			local j = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(4, 4), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 11, Parent = skel })
+			Corner(j, 2)
+			joint[jn] = j
+		end
+
+		local tab = { Name = name, Page = page, BoxStyle = "full", _boxOn = true, Colour = Color3.fromRGB(255, 60, 60),
+			Parts = { Box = box, BoxStroke = boxStroke, Corners = corners, Name = nameL, Distance = distL, Weapon = weapon, HealthBg = hpBg, Health = hp, Tracer = tracer, Skeleton = skel },
+			_cornerBars = cornerBars, _skelLines = skelLines, _joints = joint }
+
+		function tab:_layout()
+			local cx = canvas.AbsoluteSize.X * 0.5
+			local by = body.AbsolutePosition.Y - canvas.AbsolutePosition.Y + BH * 0.5
+			local top, bottom = by - BH * 0.5 - PAD, by + BH * 0.5 + PAD
+			local left = cx - BW * 0.5 - PAD
+			box.Position = UDim2.fromOffset(cx, by)
+			corners.Position = UDim2.fromOffset(cx, by)
+			nameL.Position = UDim2.fromOffset(cx, top - 4)
+			distL.Position = UDim2.fromOffset(cx, bottom + 3)
+			weapon.Position = UDim2.fromOffset(cx, bottom + 15)
+			hpBg.Position = UDim2.fromOffset(left - 5, by)
+			tracer.Position = UDim2.new(0.5, 0, 1, 0)
+			tracer.Size = UDim2.fromOffset(1, canvas.AbsoluteSize.Y - bottom)
+			local arm = 14
+			local W, H = BW + PAD * 2, BH + PAD * 2
+			local cb = self._cornerBars
+			cb[1].Position = UDim2.fromOffset(0, 0) cb[1].Size = UDim2.fromOffset(arm, 1.5)
+			cb[2].Position = UDim2.fromOffset(0, 0) cb[2].Size = UDim2.fromOffset(1.5, arm)
+			cb[3].Position = UDim2.fromOffset(W - arm, 0) cb[3].Size = UDim2.fromOffset(arm, 1.5)
+			cb[4].Position = UDim2.fromOffset(W - 1.5, 0) cb[4].Size = UDim2.fromOffset(1.5, arm)
+			cb[5].Position = UDim2.fromOffset(0, H - 1.5) cb[5].Size = UDim2.fromOffset(arm, 1.5)
+			cb[6].Position = UDim2.fromOffset(0, H - arm) cb[6].Size = UDim2.fromOffset(1.5, arm)
+			cb[7].Position = UDim2.fromOffset(W - arm, H - 1.5) cb[7].Size = UDim2.fromOffset(arm, 1.5)
+			cb[8].Position = UDim2.fromOffset(W - 1.5, H - arm) cb[8].Size = UDim2.fromOffset(1.5, arm)
+			local ox, oy = body.AbsolutePosition.X - canvas.AbsolutePosition.X, body.AbsolutePosition.Y - canvas.AbsolutePosition.Y
+			for bi, pair in ipairs(bones) do
+				local a, b = joints[pair[1]], joints[pair[2]]
+				local ln = self._skelLines[bi]
+				local dx, dy = b.X - a.X, b.Y - a.Y
+				ln.Position = UDim2.fromOffset(ox + (a.X + b.X) * 0.5, oy + (a.Y + b.Y) * 0.5)
+				ln.Size = UDim2.fromOffset(math.sqrt(dx * dx + dy * dy), 1.5)
+				ln.Rotation = math.deg(math.atan2(dy, dx))
+			end
+			for jn, j in pairs(self._joints) do j.Position = UDim2.fromOffset(ox + joints[jn].X, oy + joints[jn].Y) end
+		end
+		function tab:SetColour(c)
+			self.Colour = c
+			boxStroke.Color = c
+			for _, b in ipairs(self._cornerBars) do b.BackgroundColor3 = c end
+			for _, l in ipairs(self._skelLines) do l.BackgroundColor3 = c end
+			tracer.BackgroundColor3 = c
+			nameL.TextColor3 = c
+		end
 		function tab:SetBoxStyle(style)
 			self.BoxStyle = style
-			self.Parts.Box.Visible = (style == "full") and self._boxOn ~= false
-			self.Parts.Corners.Visible = (style == "corner") and self._boxOn ~= false
+			box.Visible = self._boxOn and style == "full"
+			corners.Visible = self._boxOn and style == "corner"
 		end
-		preview._tracked = preview._tracked or {}
-		table.insert(preview._tracked, tab)
-		function tab:SetText(which, text)
-			local p = self.Parts[which]
-			if p and p:IsA("TextLabel") then p.Text = text end
-		end
+		function tab:SetText(which, text) local p = self.Parts[which] if p and p:IsA("TextLabel") then p.Text = text end end
 		function tab:SetHealth(frac)
 			frac = math.clamp(frac or 1, 0, 1)
-			self.Parts.Health.Size = UDim2.fromScale(frac, 1)
-			self.Parts.Health.BackgroundColor3 = Color3.fromRGB(math.floor(255 * (1 - frac)), math.floor(255 * frac), 0)
+			hp.Size = UDim2.new(1, 0, frac, 0)
+			hp.BackgroundColor3 = Color3.fromRGB(math.floor(255 * (1 - frac)), math.floor(230 * frac + 25), 40)
 		end
 		function tab:Set(settings)
 			for key, val in pairs(settings) do
-				local part = self.Parts[key]
-				if part then
-					if typeof(val) == "boolean" then
-						if key == "Box" then
-							self._boxOn = val
-							self.Parts.Box.Visible = val and self.BoxStyle == "full"
-							self.Parts.Corners.Visible = val and self.BoxStyle == "corner"
-						else
-							part.Visible = val
-						end
-					elseif typeof(val) == "Color3" then
-						if part:IsA("TextLabel") then part.TextColor3 = val
-						elseif key == "Box" then self.Parts.BoxStroke.Color = val for _, b in ipairs(self._cornerBars) do b.BackgroundColor3 = val end
-						elseif key == "Skeleton" then for _, ln in ipairs(self._skelLines) do ln.BackgroundColor3 = val end
-						else part.BackgroundColor3 = val end
-					end
+				if typeof(val) == "boolean" then
+					if key == "Box" then self._boxOn = val self:SetBoxStyle(self.BoxStyle)
+					elseif self.Parts[key] then self.Parts[key].Visible = val end
+				elseif typeof(val) == "Color3" then
+					if key == "Box" or key == "Colour" then self:SetColour(val)
+					elseif key == "Name" then nameL.TextColor3 = val
+					elseif key == "Skeleton" then for _, l in ipairs(self._skelLines) do l.BackgroundColor3 = val end
+					elseif key == "Tracer" then tracer.BackgroundColor3 = val
+					elseif self.Parts[key] then self.Parts[key].BackgroundColor3 = val end
 				end
 			end
 		end
-		local tb = Create("TextButton", { Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, Text = "", AutoButtonColor = false, LayoutOrder = i, ZIndex = 6, Parent = tabBar })
-		tb.BackgroundColor3 = Color3.fromRGB(255, 255, 255); tb.BackgroundTransparency = 1; Corner(tb, 5); Pad(tb, 9, 9, 0, 0)
+
+		local tb = Create("TextButton", { Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, Text = "", AutoButtonColor = false, BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 1, LayoutOrder = i, ZIndex = 6, Parent = tabBar })
+		Corner(tb, 5); Pad(tb, 9, 9, 0, 0)
 		local tl = Text(tb, string.lower(name), 10, true, "FontDim"); tl.AutomaticSize = Enum.AutomaticSize.X; tl.Size = UDim2.new(0, 0, 1, 0); tl.ZIndex = 7
 		tab._label, tab._btn = tl, tb
 		function tab:Select()
@@ -2045,6 +1967,49 @@ function GroupboxMethods:AddESPPreview(cfg)
 		tb.MouseButton1Click:Connect(function() tab:Select() end)
 		table.insert(preview.Tabs, tab)
 	end
+
+	-- keep every tab's overlay glued to the figure
+	Library:GiveSignal(RunService.RenderStepped:Connect(function()
+		if not canvas.Visible or not f:IsDescendantOf(ScreenGui) then return end
+		for _, t in ipairs(preview.Tabs) do if t.Page.Visible then t:_layout() end end
+	end))
+
+	-- pop-out
+	local popBtn = Create("TextButton", { Size = UDim2.fromOffset(22, 22), Position = UDim2.new(1, -30, 0, 8), Text = "", AutoButtonColor = false, BackgroundTransparency = 0.4, ZIndex = 13, Parent = canvas })
+	Corner(popBtn, 7); Library:AddToRegistry(popBtn, { BackgroundColor3 = "Main" }); Stroke(popBtn, "Outline")
+	do
+		local a = Create("Frame", { Size = UDim2.fromOffset(8, 6), Position = UDim2.new(0.5, -6, 0.5, -5), BackgroundTransparency = 1, ZIndex = 14, Parent = popBtn })
+		local s1 = Create("UIStroke", { Thickness = 1, Parent = a }); Library:AddToRegistry(s1, { Color = "FontDim" })
+		local b = Create("Frame", { Size = UDim2.fromOffset(8, 6), Position = UDim2.new(0.5, -2, 0.5, -1), BackgroundTransparency = 1, ZIndex = 15, Parent = popBtn })
+		local s2 = Create("UIStroke", { Thickness = 1, Parent = b }); Library:AddToRegistry(s2, { Color = "Accent" })
+	end
+	local floating = nil
+	popBtn.MouseButton1Click:Connect(function()
+		if floating then
+			canvas.Parent = f
+			canvas.Position = UDim2.new(0, 0, 0, 26)
+			canvas.Size = UDim2.new(1, 0, 0, CANVAS_H)
+			if floating._shadow then floating._shadow:Destroy() end
+			floating.Frame:Destroy()
+			floating = nil
+			return
+		end
+		local win = Create("Frame", { Size = UDim2.fromOffset(360, 330), Position = UDim2.new(0.5, -180, 0.5, -165), BackgroundTransparency = 0.05, ZIndex = 400, Parent = PopupLayer })
+		Library:AddToRegistry(win, { BackgroundColor3 = "Main" })
+		Corner(win, 14)
+		local wst = Create("UIStroke", { Thickness = 1, Transparency = 0.15, Parent = win }); Library:AddToRegistry(wst, { Color = "Outline" })
+		local wedge = Create("UIStroke", { Thickness = 1, Transparency = 0.65, Parent = win }); Library:AddToRegistry(wedge, { Color = "Accent" })
+		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.2, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = wedge })
+		local winShadow = Shadow(win, 12)
+		local bar = Create("TextButton", { Size = UDim2.new(1, 0, 0, 30), BackgroundTransparency = 1, Text = "", AutoButtonColor = false, ZIndex = 401, Parent = win })
+		local tl = Text(bar, "esp preview", 12, true); tl.Position = UDim2.new(0, 12, 0, 0); tl.Size = UDim2.new(1, -40, 1, 0); tl.ZIndex = 402
+		Draggable(bar, win)
+		canvas.Parent = win
+		canvas.Position = UDim2.new(0, 10, 0, 34)
+		canvas.Size = UDim2.new(1, -20, 1, -44)
+		floating = { Frame = win, _shadow = winShadow }
+	end)
+
 	function preview:GetTab(name) for _, t in ipairs(self.Tabs) do if t.Name == name then return t end end end
 	function preview:Set(name, settings) local t = self:GetTab(name) if t then t:Set(settings) end end
 	if preview.Tabs[1] then preview.Tabs[1]:Select() end
@@ -2194,135 +2159,6 @@ do
 		elseif inp.KeyCode == Enum.KeyCode.Up then sel = math.max(sel - 1, 1) paint()
 		elseif inp.KeyCode == Enum.KeyCode.Return or inp.KeyCode == Enum.KeyCode.KeypadEnter then Library:_PaletteRun() end
 	end))
-end
-
--- ===================================================================================
--- Session stats
--- ===================================================================================
-Library.Stats = { _t0 = os.clock(), _custom = {}, _order = {}, joins = 0, leaves = 0, deaths = 0, fpsMin = 999, fpsMax = 0, fpsAvg = 0, _fps = 0, _samples = {} }
-function Library.Stats:Add(key, n)
-	if not self._custom[key] then self._custom[key] = 0 table.insert(self._order, key) end
-	self._custom[key] = self._custom[key] + (n or 1)
-end
-function Library.Stats:Set(key, v)
-	if not self._custom[key] then table.insert(self._order, key) end
-	self._custom[key] = v
-end
-function Library.Stats:Get(key) return self._custom[key] end
-do
-	local S = Library.Stats
-	Library:GiveSignal(Players.PlayerAdded:Connect(function() S.joins = S.joins + 1 end))
-	Library:GiveSignal(Players.PlayerRemoving:Connect(function(p) if p ~= LocalPlayer then S.leaves = S.leaves + 1 end end))
-	local function hookChar(ch)
-		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
-		if hum then hum.Died:Connect(function() S.deaths = S.deaths + 1 end) end
-	end
-	if LocalPlayer.Character then hookChar(LocalPlayer.Character) end
-	Library:GiveSignal(LocalPlayer.CharacterAdded:Connect(function(ch) task.defer(hookChar, ch) end))
-	task.spawn(function()
-		local frames, acc = 0, 0
-		Library:GiveSignal(RunService.RenderStepped:Connect(function(dt) frames = frames + 1 acc = acc + dt end))
-		while not Library.Unloaded do
-			task.wait(1)
-			local fps = frames
-			frames, acc = 0, 0
-			S._fps = fps
-			if fps > 0 then
-				S.fpsMin = math.min(S.fpsMin, fps)
-				S.fpsMax = math.max(S.fpsMax, fps)
-				table.insert(S._samples, fps)
-				if #S._samples > 120 then table.remove(S._samples, 1) end
-				local sum = 0
-				for _, v in ipairs(S._samples) do sum = sum + v end
-				S.fpsAvg = math.floor(sum / #S._samples + 0.5)
-			end
-		end
-	end)
-end
-
-function GroupboxMethods:AddSession(cfg)
-	cfg = cfg or {}
-	local S = Library.Stats
-	local f = row(self, 150, true)
-
-	-- fps graph
-	local graph = Create("Frame", { Size = UDim2.new(1, 0, 0, 54), Position = UDim2.new(0, 0, 0, 0), ClipsDescendants = true, ZIndex = 5, Parent = f })
-	Library:AddToRegistry(graph, { BackgroundColor3 = "Well" }); Corner(graph, 8); Stroke(graph, "Outline")
-	local BARS = 60
-	local bars = {}
-	for i = 1, BARS do
-		local b = Create("Frame", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1 / BARS, -1, 0, 2), Position = UDim2.new((i - 1) / BARS, 0, 1, 0), BorderSizePixel = 0, ZIndex = 6, Parent = graph })
-		Library:AddToRegistry(b, { BackgroundColor3 = "Accent" })
-		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(1, 0.7) }), Parent = b })
-		bars[i] = b
-	end
-	local fpsNow = Text(graph, "", 11, true); fpsNow.Position = UDim2.new(0, 8, 0, 4); fpsNow.Size = UDim2.new(0, 120, 0, 14); fpsNow.ZIndex = 7
-	local fpsRange = Text(graph, "", 10, false, "FontDim"); fpsRange.TextXAlignment = Enum.TextXAlignment.Right; fpsRange.Position = UDim2.new(1, -128, 0, 4); fpsRange.Size = UDim2.new(0, 120, 0, 14); fpsRange.ZIndex = 7
-
-	-- stat tiles: 2 columns
-	local grid = Create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.new(0, 0, 0, 62), BackgroundTransparency = 1, ZIndex = 5, Parent = f })
-	local layout = Create("UIGridLayout", { CellSize = UDim2.new(0.5, -3, 0, 38), CellPadding = UDim2.new(0, 6, 0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = grid })
-	local tiles = {}
-	local function tile(key, label)
-		local t = Create("Frame", { ZIndex = 5, LayoutOrder = #tiles + 1, Parent = grid })
-		Library:AddToRegistry(t, { BackgroundColor3 = "Element" }); Corner(t, 8); Stroke(t, "Outline")
-		local l = Text(t, string.upper(label), 9, true, "FontDim"); l.Position = UDim2.new(0, 10, 0, 5); l.Size = UDim2.new(1, -20, 0, 11); l.ZIndex = 6
-		local v = Text(t, "0", 13, true); v.Position = UDim2.new(0, 10, 0, 18); v.Size = UDim2.new(1, -20, 0, 16); v.ZIndex = 6
-		tiles[#tiles + 1] = { key = key, value = v, frame = t }
-		return t
-	end
-	tile("uptime", "uptime"); tile("ping", "ping"); tile("joins", "joins"); tile("leaves", "leaves"); tile("deaths", "deaths"); tile("players", "in server")
-	local customTiles = {}
-	local function ensureCustom()
-		for _, key in ipairs(S._order) do
-			if not customTiles[key] then customTiles[key] = tile("custom:" .. key, key) end
-		end
-	end
-	local function relayoutHeight()
-		local n = #tiles
-		local rowsN = math.ceil(n / 2)
-		f.Size = UDim2.new(1, 0, 0, 62 + rowsN * 44)
-	end
-	relayoutHeight()
-
-	local function fmtUptime()
-		local s = math.floor(os.clock() - S._t0)
-		local h, m = math.floor(s / 3600), math.floor((s % 3600) / 60)
-		if h > 0 then return string.format("%dh %02dm", h, m) end
-		return string.format("%dm %02ds", m, s % 60)
-	end
-	task.spawn(function()
-		while not Library.Unloaded and f.Parent do
-			ensureCustom()
-			relayoutHeight()
-			local ping = ""
-			pcall(function() ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValueString():match("^(%d+)") or "" end)
-			for _, t in ipairs(tiles) do
-				local k = t.key
-				if k == "uptime" then t.value.Text = fmtUptime()
-				elseif k == "ping" then t.value.Text = (ping ~= "" and ping .. " ms") or "-"
-				elseif k == "joins" then t.value.Text = tostring(S.joins)
-				elseif k == "leaves" then t.value.Text = tostring(S.leaves)
-				elseif k == "deaths" then t.value.Text = tostring(S.deaths)
-				elseif k == "players" then t.value.Text = tostring(#Players:GetPlayers())
-				elseif string.sub(k, 1, 7) == "custom:" then t.value.Text = tostring(S._custom[string.sub(k, 8)] or 0) end
-			end
-			fpsNow.Text = tostring(S._fps) .. " fps"
-			fpsRange.Text = string.format("avg %d   min %d   max %d", S.fpsAvg, S.fpsMin == 999 and 0 or S.fpsMin, S.fpsMax)
-			local samples = S._samples
-			local n = #samples
-			local mx = 1
-			for _, v in ipairs(samples) do if v > mx then mx = v end end
-			for i = 1, BARS do
-				local idx = n - BARS + i
-				local v = samples[idx]
-				local h = v and math.max(2, math.floor((v / mx) * 44)) or 2
-				Tween(bars[i], { Size = UDim2.new(1 / BARS, -1, 0, h) }, 0.25)
-			end
-			task.wait(1)
-		end
-	end)
-	return { Frame = f }
 end
 
 Library._onUnload = {}
@@ -2717,188 +2553,4 @@ return SaveManager
 
 end)()
 
-local Spotify = (function()
-local HttpService = game:GetService("HttpService")
-
-local Spotify = { Library = nil, Token = "", ClientId = "", RedirectUri = "http://localhost:8888/callback", State = {}, Polling = false, _thread = nil }
-
-local function httpRequest(opts)
-	local fn = (type(request) == "function" and request) or (type(http_request) == "function" and http_request) or (syn and syn.request) or (fluxus and fluxus.request)
-	if not fn then return nil, "this executor has no request function" end
-	local ok, res = pcall(fn, opts)
-	if not ok then return nil, tostring(res) end
-	return res
-end
-
-function Spotify:SetLibrary(lib) self.Library = lib end
-
-function Spotify:_call(method, path, body)
-	if self.Token == "" then return nil, "no token" end
-	local res, err = httpRequest({
-		Url = "https://api.spotify.com/v1" .. path,
-		Method = method,
-		Headers = { ["Authorization"] = "Bearer " .. self.Token, ["Content-Type"] = "application/json" },
-		Body = body and HttpService:JSONEncode(body) or nil,
-	})
-	if not res then return nil, err end
-	local code = res.StatusCode or res.status or 0
-	if code == 401 then return nil, "token expired or invalid" end
-	if code == 403 then return nil, "spotify premium is required for playback control" end
-	if code == 404 then return nil, "no active device - start playing on a device first" end
-	if code >= 400 then return nil, "http " .. tostring(code) end
-	local text = res.Body or res.body or ""
-	if text == "" then return {} end
-	local ok, data = pcall(HttpService.JSONDecode, HttpService, text)
-	return ok and data or {}
-end
-
-function Spotify:Refresh()
-	local data, err = self:_call("GET", "/me/player")
-	if not data then self.State.error = err return false end
-	local s = self.State
-	s.error = nil
-	s.playing = data.is_playing == true
-	s.progress = data.progress_ms or 0
-	s.shuffle = data.shuffle_state == true
-	s.repeatMode = data.repeat_state or "off"
-	if data.item then
-		local artists = {}
-		for _, a in ipairs(data.item.artists or {}) do artists[#artists + 1] = a.name end
-		s.track = data.item.name or ""
-		s.artist = table.concat(artists, ", ")
-		s.duration = data.item.duration_ms or 0
-		s.album = data.item.album and data.item.album.name or ""
-	else
-		s.track, s.artist, s.duration, s.album = "", "", 0, ""
-	end
-	if data.device then s.device = data.device.name s.volume = data.device.volume_percent end
-	return true
-end
-
-function Spotify:Play() return self:_call("PUT", "/me/player/play") end
-function Spotify:Pause() return self:_call("PUT", "/me/player/pause") end
-function Spotify:Toggle()
-	if self.State.playing then return self:Pause() else return self:Play() end
-end
-function Spotify:Next() return self:_call("POST", "/me/player/next") end
-function Spotify:Previous() return self:_call("POST", "/me/player/previous") end
-function Spotify:SetVolume(v) return self:_call("PUT", "/me/player/volume?volume_percent=" .. math.floor(math.clamp(v, 0, 100))) end
-function Spotify:SetShuffle(on) return self:_call("PUT", "/me/player/shuffle?state=" .. tostring(on and true or false)) end
-function Spotify:SetRepeat(mode) return self:_call("PUT", "/me/player/repeat?state=" .. mode) end
-function Spotify:Seek(ms) return self:_call("PUT", "/me/player/seek?position_ms=" .. math.floor(math.max(ms, 0))) end
-
-function Spotify:LoginUrl()
-	if self.ClientId == "" then return nil end
-	local scope = HttpService:UrlEncode("user-read-playback-state user-modify-playback-state user-read-currently-playing")
-	return string.format("https://accounts.spotify.com/authorize?client_id=%s&response_type=token&redirect_uri=%s&scope=%s",
-		self.ClientId, HttpService:UrlEncode(self.RedirectUri), scope)
-end
-
-local function fmtTime(ms)
-	local s = math.floor((ms or 0) / 1000)
-	return string.format("%d:%02d", math.floor(s / 60), s % 60)
-end
-
-function Spotify:BuildSection(tab)
-	local Library = self.Library
-	local gb = tab:AddLeftGroupbox("Spotify")
-
-	local nowTitle = gb:AddLabel("not connected")
-	local nowArtist = gb:AddLabel("paste a token below, then refresh")
-	local progress = gb:AddSlider("Spotify_Progress", { Text = "position", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v)
-		if self._userSeek and self.State.duration and self.State.duration > 0 then
-			task.spawn(function() self:Seek(self.State.duration * (v / 100)) end)
-		end
-	end })
-	local timeLabel = gb:AddLabel("0:00 / 0:00")
-
-	local function report(ok, err)
-		if not ok and err then Library:Notify({ Title = "spotify", Description = tostring(err), Time = 4 }) end
-	end
-	local function paint()
-		local s = self.State
-		if s.error then
-			nowTitle:SetText("spotify: " .. s.error)
-			nowArtist:SetText("")
-			return
-		end
-		if s.track and s.track ~= "" then
-			nowTitle:SetText((s.playing and "playing  " or "paused  ") .. s.track)
-			nowArtist:SetText(s.artist .. (s.device and ("   on " .. s.device) or ""))
-			if s.duration and s.duration > 0 then
-				self._userSeek = false
-				progress:SetValue(math.floor((s.progress / s.duration) * 100), true)
-				self._userSeek = true
-			end
-			timeLabel:SetText(fmtTime(s.progress) .. " / " .. fmtTime(s.duration))
-		else
-			nowTitle:SetText("nothing playing")
-			nowArtist:SetText(s.device and ("device: " .. s.device) or "start playback on any device")
-		end
-		if s.volume and Library.Options.Spotify_Volume then Library.Options.Spotify_Volume:SetValue(s.volume, true) end
-		if Library.Toggles.Spotify_Shuffle and Library.Toggles.Spotify_Shuffle.Value ~= s.shuffle then Library.Toggles.Spotify_Shuffle:SetValue(s.shuffle, true) end
-	end
-	self._userSeek = true
-
-	gb:AddButton({ Text = "previous", Func = function() task.spawn(function() report(self:Previous()) task.wait(0.4) self:Refresh() paint() end) end })
-		:AddButton({ Text = "play / pause", Func = function() task.spawn(function() report(self:Toggle()) task.wait(0.4) self:Refresh() paint() end) end })
-	gb:AddButton({ Text = "next", Func = function() task.spawn(function() report(self:Next()) task.wait(0.4) self:Refresh() paint() end) end })
-		:AddButton({ Text = "refresh", Func = function() task.spawn(function() self:Refresh() paint() end) end })
-
-	gb:AddSlider("Spotify_Volume", { Text = "volume", Default = 50, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v)
-		if self._volDebounce then return end
-		self._volDebounce = true
-		task.delay(0.25, function() self._volDebounce = false task.spawn(function() report(self:SetVolume(v)) end) end)
-	end })
-	gb:AddToggle("Spotify_Shuffle", { Text = "shuffle", Default = false, Callback = function(v) task.spawn(function() report(self:SetShuffle(v)) end) end })
-	gb:AddDropdown("Spotify_Repeat", { Text = "repeat", Values = { "off", "context", "track" }, Default = 1, Callback = function(v)
-		if type(v) == "table" then for k, on in pairs(v) do if on then v = k break end end end
-		task.spawn(function() report(self:SetRepeat(v)) end)
-	end })
-	gb:AddToggle("Spotify_Poll", { Text = "live update (every 3s)", Default = true, Callback = function(v)
-		self.Polling = v
-		if v and not self._thread then
-			self._thread = task.spawn(function()
-				while self.Polling and not Library.Unloaded do
-					if self.Token ~= "" then pcall(function() self:Refresh() paint() end) end
-					task.wait(3)
-				end
-				self._thread = nil
-			end)
-		end
-	end })
-
-	local auth = tab:AddRightGroupbox("Spotify login")
-	auth:AddInput("Spotify_Token", { Text = "access token", Placeholder = "BQ...", Finished = true, Callback = function(v)
-		self.Token = tostring(v or "")
-		task.spawn(function() self:Refresh() paint() end)
-	end })
-	auth:AddInput("Spotify_ClientId", { Text = "client id (from developer.spotify.com)", Placeholder = "32 characters", Finished = true, Callback = function(v) self.ClientId = tostring(v or "") end })
-	auth:AddInput("Spotify_Redirect", { Text = "redirect uri (must match your app)", Default = self.RedirectUri, Finished = true, Callback = function(v) self.RedirectUri = tostring(v or "") end })
-	auth:AddButton({ Text = "print login link to console", Func = function()
-		local url = self:LoginUrl()
-		if not url then Library:Notify({ Title = "spotify", Description = "enter your client id first", Time = 4 }) return end
-		print("[spotify] open this in a browser, log in, then copy access_token from the url you land on:")
-		print(url)
-		pcall(function() setclipboard(url) end)
-		Library:Notify({ Title = "spotify", Description = "login link printed and copied", Time = 4 })
-	end })
-	auth:AddLabel("tokens from the login link last 1 hour. playback control needs premium.", true)
-
-	self.Polling = true
-	self._thread = task.spawn(function()
-		while self.Polling and not Library.Unloaded do
-			if self.Token ~= "" then pcall(function() self:Refresh() paint() end) end
-			task.wait(3)
-		end
-		self._thread = nil
-	end)
-	Library:OnUnload(function() self.Polling = false end)
-	return gb
-end
-
-return Spotify
-
-end)()
-
-return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager, Spotify = Spotify }
+return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager }
