@@ -1774,6 +1774,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 	cfg = cfg or {}
 	local tabsCfg = cfg.Tabs or { "Enemy", "Team" }
 	local CANVAS_H = cfg.Height or 250
+	local userId = tonumber(cfg.UserId) or 5508585538
 	local f = row(self, CANVAS_H + 26, true)
 
 	-- segmented tabs
@@ -1781,186 +1782,190 @@ function GroupboxMethods:AddESPPreview(cfg)
 	Corner(tabBar, 7); Stroke(tabBar, "Outline"); Pad(tabBar, 2, 2, 2, 2)
 	Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = tabBar })
 
-	-- canvas: black field with a fine grid
+	-- canvas
 	local canvas = Create("Frame", { Size = UDim2.new(1, 0, 0, CANVAS_H), Position = UDim2.new(0, 0, 0, 26), ClipsDescendants = true, ZIndex = 5, Parent = f })
 	Library:AddToRegistry(canvas, { BackgroundColor3 = "Well" }); Corner(canvas, 10); Stroke(canvas, "Outline")
 	do
 		local grid = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 5, Parent = canvas })
 		for i = 1, 14 do
-			local v = Create("Frame", { Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(i / 15, 0, 0, 0), BackgroundTransparency = 0.92, BorderSizePixel = 0, ZIndex = 5, Parent = grid })
+			local v = Create("Frame", { Size = UDim2.new(0, 1, 1, 0), Position = UDim2.new(i / 15, 0, 0, 0), BackgroundTransparency = 0.93, BorderSizePixel = 0, ZIndex = 5, Parent = grid })
 			Library:AddToRegistry(v, { BackgroundColor3 = "FontDim" })
 		end
 		for i = 1, 8 do
-			local h = Create("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, i / 9, 0), BackgroundTransparency = 0.92, BorderSizePixel = 0, ZIndex = 5, Parent = grid })
+			local h = Create("Frame", { Size = UDim2.new(1, 0, 0, 1), Position = UDim2.new(0, 0, i / 9, 0), BackgroundTransparency = 0.93, BorderSizePixel = 0, ZIndex = 5, Parent = grid })
 			Library:AddToRegistry(h, { BackgroundColor3 = "FontDim" })
 		end
-		local floorGlow = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0.7, 0, 0, 60), Position = UDim2.new(0.5, 0, 1, 20), BackgroundTransparency = 0.92, BorderSizePixel = 0, ZIndex = 5, Parent = canvas })
-		Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = floorGlow })
-		Library:AddToRegistry(floorGlow, { BackgroundColor3 = "Accent" })
-		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.3) }), Parent = floorGlow })
 	end
 
-	-- ---------------------------------------------------------------- figure (2D, crisp)
-	-- all geometry in a 64 x 140 body box centred in the canvas; joint map is exact, so overlays never drift
-	-- the figure is the player's real avatar render; the body box is calibrated to where the character sits in that render
-	local IMG = 190
-	local BW, BH = 76, 158
-	local body = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(BW, BH), Position = UDim2.new(0.5, 0, 0.5, 6), BackgroundTransparency = 1, ZIndex = 6, Parent = canvas })
-	-- glow layers sit behind the avatar: tinted copies of the same render, offset in a ring
-	local glowLayers = {}
-	local GLOW_OFFSETS = {}
-	for i = 0, 7 do
-		local a = math.rad(i * 45)
-		GLOW_OFFSETS[#GLOW_OFFSETS + 1] = { Vector2.new(math.cos(a) * 1.6, math.sin(a) * 1.6), 0.15 }
-	end
-	for i = 0, 7 do
-		local a = math.rad(i * 45 + 22.5)
-		GLOW_OFFSETS[#GLOW_OFFSETS + 1] = { Vector2.new(math.cos(a) * 3.4, math.sin(a) * 3.4), 0.72 }
-	end
-	for _, spec in ipairs(GLOW_OFFSETS) do
-		local g = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(IMG, IMG), Position = UDim2.new(0.5, spec[1].X, 0.5, 2 + spec[1].Y), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, ImageColor3 = Color3.fromRGB(255, 0, 0), ImageTransparency = spec[2], Visible = false, ZIndex = 5, Parent = body })
-		glowLayers[#glowLayers + 1] = g
-	end
-	local avatar = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(IMG, IMG), Position = UDim2.new(0.5, 0, 0.5, 2), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, ZIndex = 6, Parent = body })
-	local function applyImage(img)
-		avatar.Image = img
-		for _, g in ipairs(glowLayers) do g.Image = img end
-	end
-	local function setUser(userId)
-		local id = tonumber(userId) or 5508585538
-		applyImage(string.format("rbxthumb://type=AvatarThumbnail&id=%d&w=420&h=420", id))
-		task.spawn(function()
-			for _ = 1, 8 do
-				local ok, content, ready = pcall(function()
-					return Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.AvatarThumbnail, Enum.ThumbnailSize.Size420x420)
-				end)
-				if ok and content and content ~= "" then
-					applyImage(content)
-					if ready then return end
-				end
-				task.wait(1)
+	-- 3D model
+	local vp = Create("ViewportFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Ambient = Color3.fromRGB(190, 190, 200), LightColor = Color3.fromRGB(255, 255, 255), LightDirection = Vector3.new(-0.5, -1, -0.8), ZIndex = 6, Parent = canvas })
+	local wm = Create("WorldModel", { Parent = vp })
+	local cam = Create("Camera", { FieldOfView = 34, Parent = vp })
+	vp.CurrentCamera = cam
+	local dummy = nil
+	local glowParts = {}
+	local yaw, dist = math.rad(20), 8.5
+	local glowOn, glowColour = true, Color3.fromRGB(255, 0, 0)
+
+	local function buildGlow(m)
+		for _, g in ipairs(glowParts) do pcall(function() g.part:Destroy() end) end
+		glowParts = {}
+		for _, d in ipairs(m:GetDescendants()) do
+			if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" and d.Transparency < 1 then
+				local shell = Instance.new("Part")
+				shell.Name = "_glow"
+				shell.Anchored = true
+				shell.CanCollide = false
+				shell.CastShadow = false
+				shell.Material = Enum.Material.Neon
+				shell.Color = glowColour
+				shell.Transparency = 0.25
+				shell.Size = d.Size * 1.1 + Vector3.new(0.06, 0.06, 0.06)
+				shell.Shape = (d:IsA("Part") and d.Shape) or Enum.PartType.Block
+				shell.Parent = wm
+				glowParts[#glowParts + 1] = { part = shell, src = d }
 			end
+		end
+	end
+	local function loadUser(id)
+		task.spawn(function()
+			local ok, m = pcall(function() return Players:CreateHumanoidModelFromUserId(id) end)
+			if not ok or not m then
+				local ok2, m2 = pcall(function() return Players:CreateHumanoidModelFromDescription(Instance.new("HumanoidDescription"), Enum.HumanoidRigType.R15) end)
+				m = ok2 and m2 or nil
+			end
+			if not m then return end
+			if dummy then pcall(function() dummy:Destroy() end) end
+			for _, d in ipairs(m:GetDescendants()) do if d:IsA("Script") or d:IsA("LocalScript") then d:Destroy() end end
+			local hum = m:FindFirstChildOfClass("Humanoid")
+			if hum then hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end
+			m:PivotTo(CFrame.new(0, 0, 0))
+			m.Parent = wm
+			dummy = m
+			buildGlow(m)
+			pcall(function()
+				local h = m:FindFirstChildOfClass("Humanoid")
+				if not h then return end
+				local animator = h:FindFirstChildOfClass("Animator") or Instance.new("Animator", h)
+				local anim = Instance.new("Animation")
+				anim.AnimationId = h.RigType == Enum.HumanoidRigType.R6 and "rbxassetid://180435571" or "rbxassetid://507766666"
+				local track = animator:LoadAnimation(anim)
+				track.Looped = true
+				track:Play()
+			end)
 		end)
 	end
-	setUser(cfg.UserId or 5508585538)
-	-- joints as proportions of the body box (typical R15 full-body render)
-	local function J(x, y) return Vector2.new(BW * x, BH * y) end
-	local joints = {
-		head = J(0.5, 0.09), neck = J(0.5, 0.18), chest = J(0.5, 0.3), hip = J(0.5, 0.52),
-		lsh = J(0.3, 0.22), lel = J(0.24, 0.37), lha = J(0.2, 0.5),
-		rsh = J(0.7, 0.22), rel = J(0.76, 0.37), rha = J(0.8, 0.5),
-		lhp = J(0.4, 0.55), lkn = J(0.39, 0.76), lft = J(0.38, 0.96),
-		rhp = J(0.6, 0.55), rkn = J(0.61, 0.76), rft = J(0.62, 0.96),
-	}
-	local bones = { { "head", "neck" }, { "neck", "chest" }, { "chest", "hip" }, { "neck", "lsh" }, { "lsh", "lel" }, { "lel", "lha" }, { "neck", "rsh" }, { "rsh", "rel" }, { "rel", "rha" }, { "hip", "lhp" }, { "lhp", "lkn" }, { "lkn", "lft" }, { "hip", "rhp" }, { "rhp", "rkn" }, { "rkn", "rft" } }
+	loadUser(userId)
 
-	-- idle bob
-	task.spawn(function()
-		local t = 0
-		while not Library.Unloaded and body.Parent do
-			t = t + task.wait(0.03)
-			body.Position = UDim2.new(0.5, 0, 0.5, 6 + math.sin(t * 1.6) * 2)
-		end
+	-- drag to rotate, wheel / buttons to zoom
+	local dragging, lastX = false, 0
+	canvas.Active = true
+	canvas.InputBegan:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then dragging = true lastX = inp.Position.X end
 	end)
+	canvas.InputChanged:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseWheel then dist = math.clamp(dist - inp.Position.Z * 1.0, 4, 16) end
+	end)
+	Library:GiveSignal(UserInputService.InputChanged:Connect(function(inp)
+		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+			yaw = yaw + (inp.Position.X - lastX) * 0.012
+			lastX = inp.Position.X
+		end
+	end))
+	Library:GiveSignal(UserInputService.InputEnded:Connect(function(inp)
+		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then dragging = false end
+	end))
+	local zoomBox = Create("Frame", { Size = UDim2.fromOffset(24, 50), Position = UDim2.new(1, -32, 1, -58), BackgroundTransparency = 1, ZIndex = 12, Parent = canvas })
+	Create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = zoomBox })
+	for i, spec in ipairs({ { "+", -1.5 }, { "-", 1.5 } }) do
+		local zb = Create("TextButton", { Size = UDim2.fromOffset(22, 22), Text = spec[1], TextSize = 14, FontFace = Library.FontFaceBold, AutoButtonColor = false, BackgroundTransparency = 0.4, LayoutOrder = i, ZIndex = 13, Parent = zoomBox })
+		Corner(zb, 7); Library:AddToRegistry(zb, { BackgroundColor3 = "Main", TextColor3 = "FontDim" }); Stroke(zb, "Outline")
+		zb.MouseButton1Click:Connect(function() dist = math.clamp(dist + spec[2], 4, 16) end)
+	end
+	local hintL = Text(canvas, "", 9, false, "FontDim"); hintL.Position = UDim2.new(0, 10, 1, -18); hintL.Size = UDim2.new(0, 200, 0, 12); hintL.ZIndex = 12; hintL.TextTransparency = 0.35
+	hintL.Text = "drag to rotate   scroll to zoom"
 
 	local preview = { Frame = f, Tabs = {}, Active = nil, Canvas = canvas }
+	local function project(world)
+		local rel = cam.CFrame:PointToObjectSpace(world)
+		if rel.Z > -0.05 then return nil end
+		local sz = canvas.AbsoluteSize
+		if sz.X < 1 or sz.Y < 1 then return nil end
+		local tanHalf = math.tan(math.rad(cam.FieldOfView) * 0.5)
+		local px = (rel.X / -rel.Z) / (tanHalf * (sz.X / sz.Y))
+		local py = (rel.Y / -rel.Z) / tanHalf
+		return Vector2.new((px * 0.5 + 0.5) * sz.X, (0.5 - py * 0.5) * sz.Y)
+	end
+	local function applyGlow()
+		for _, g in ipairs(glowParts) do g.part.Transparency = glowOn and 0.25 or 1 g.part.Color = glowColour end
+	end
 
 	for i, name in ipairs(tabsCfg) do
 		local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 8, Parent = canvas })
-		local PAD = 6
-		-- outline: the glow copies behind the avatar, in this tab's colour
-		local outlineOn = true
-		local outlineColour = Color3.fromRGB(255, 60, 60)
-		-- text
-		local function esptext(sz, bold)
-			local t = Create("TextLabel", { BackgroundTransparency = 1, TextSize = sz, FontFace = bold and Library.FontFaceBold or Library.FontFace, TextColor3 = Color3.new(1, 1, 1), TextStrokeColor3 = Color3.new(0, 0, 0), TextStrokeTransparency = 0.15, ZIndex = 11, Parent = page })
-			return t
-		end
-		local nameL = esptext(12, true); nameL.AnchorPoint = Vector2.new(0.5, 1); nameL.Size = UDim2.new(0, 160, 0, 14); nameL.Text = "player"
-		local distL = esptext(10, false); distL.AnchorPoint = Vector2.new(0.5, 0); distL.Size = UDim2.new(0, 160, 0, 12); distL.Text = "[42] 180/250"
-		local weapon = esptext(10, false); weapon.AnchorPoint = Vector2.new(0.5, 0); weapon.Size = UDim2.new(0, 160, 0, 12); weapon.Text = "weapon"; weapon.Visible = false
-		-- health bar (vertical, left of box)
-		local hpBg = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(3, BH + PAD * 2), BackgroundColor3 = Color3.new(0, 0, 0), BorderSizePixel = 0, ZIndex = 9, Parent = page })
-		Create("UIStroke", { Thickness = 1, Color = Color3.new(0, 0, 0), Transparency = 0.4, Parent = hpBg })
-		local hp = Create("Frame", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0.72, 0), Position = UDim2.new(0, 0, 1, 0), BackgroundColor3 = Color3.fromRGB(80, 230, 90), BorderSizePixel = 0, ZIndex = 10, Parent = hpBg })
-		-- tracer
-		local tracer = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(1, 60), BackgroundColor3 = Color3.fromRGB(255, 60, 60), BorderSizePixel = 0, Visible = false, ZIndex = 8, Parent = page })
-		-- skeleton
-		local skel = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 10, Parent = page })
-		local skelLines = {}
-		for bi = 1, #bones do
-			skelLines[bi] = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BackgroundColor3 = Color3.fromRGB(255, 60, 60), BorderSizePixel = 0, ZIndex = 10, Parent = skel })
-		end
-		local joint = {}
-		for jn in pairs(joints) do
-			local j = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(4, 4), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 11, Parent = skel })
-			Corner(j, 2)
-			joint[jn] = j
-		end
+		-- the veil card, verbatim: Code font, hard black stroke, name / "[dist] hp/max" / 60x3 bar, stacked above the head
+		local card = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(160, 36), BackgroundTransparency = 1, ZIndex = 9, Parent = page })
+		local nameL = Create("TextLabel", { Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, Font = Enum.Font.Code, TextSize = 13, TextColor3 = Color3.fromRGB(255, 255, 255), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, Text = "player", ZIndex = 10, Parent = card })
+		local subL = Create("TextLabel", { Size = UDim2.new(1, 0, 0, 12), Position = UDim2.new(0, 0, 0, 14), BackgroundTransparency = 1, Font = Enum.Font.Code, TextSize = 11, TextColor3 = Color3.fromRGB(220, 220, 220), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, Text = "[42] 180/250", ZIndex = 10, Parent = card })
+		local barBg = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 28), Size = UDim2.fromOffset(60, 3), BackgroundColor3 = Color3.fromRGB(0, 0, 0), BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(0, 0, 0), ZIndex = 10, Parent = card })
+		local bar = Create("Frame", { Size = UDim2.fromScale(0.72, 1), BackgroundColor3 = Color3.fromRGB(71, 255, 0), BorderSizePixel = 0, ZIndex = 11, Parent = barBg })
+		local tracer = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(1, 60), BackgroundColor3 = Color3.fromRGB(255, 0, 0), BorderSizePixel = 0, Visible = false, ZIndex = 8, Parent = page })
 
-		local tab = { Name = name, Page = page, Colour = Color3.fromRGB(255, 60, 60),
-			Parts = { Name = nameL, Distance = distL, Weapon = weapon, HealthBg = hpBg, Health = hp, Tracer = tracer, Skeleton = skel },
-			_skelLines = skelLines, _joints = joint }
-		function tab:_applyOutline()
-			if preview.Active ~= self then return end
-			for _, g in ipairs(glowLayers) do
-				g.Visible = outlineOn
-				g.ImageColor3 = outlineColour
-			end
-		end
-
+		local tab = { Name = name, Page = page, Colour = Color3.fromRGB(255, 0, 0), Parts = { Name = nameL, Distance = subL, HealthBg = barBg, Health = bar, Tracer = tracer, Card = card }, _show = { Name = true, Distance = true, HealthBg = true, Tracer = false, Outline = true } }
 		function tab:_layout()
-			local cx = canvas.AbsoluteSize.X * 0.5
-			local by = body.AbsolutePosition.Y - canvas.AbsolutePosition.Y + BH * 0.5
-			local top, bottom = by - BH * 0.5 - PAD, by + BH * 0.5 + PAD
-			local left = cx - BW * 0.5 - PAD
-			nameL.Position = UDim2.fromOffset(cx, top - 4)
-			distL.Position = UDim2.fromOffset(cx, bottom + 3)
-			weapon.Position = UDim2.fromOffset(cx, bottom + 15)
-			hpBg.Position = UDim2.fromOffset(left - 5, by)
-			tracer.Position = UDim2.new(0.5, 0, 1, 0)
-			tracer.Size = UDim2.fromOffset(1, canvas.AbsoluteSize.Y - bottom)
-			local ox, oy = body.AbsolutePosition.X - canvas.AbsolutePosition.X, body.AbsolutePosition.Y - canvas.AbsolutePosition.Y
-			for bi, pair in ipairs(bones) do
-				local a, b = joints[pair[1]], joints[pair[2]]
-				local ln = self._skelLines[bi]
-				local dx, dy = b.X - a.X, b.Y - a.Y
-				ln.Position = UDim2.fromOffset(ox + (a.X + b.X) * 0.5, oy + (a.Y + b.Y) * 0.5)
-				ln.Size = UDim2.fromOffset(math.sqrt(dx * dx + dy * dy), 1.5)
-				ln.Rotation = math.deg(math.atan2(dy, dx))
+			if not dummy then return end
+			local ok, boxCf, ext = pcall(function() return dummy:GetBoundingBox() end)
+			if not ok then return end
+			local top = project(boxCf.Position + Vector3.new(0, ext.Y * 0.5 + 0.4, 0))
+			local bottom = project(boxCf.Position - Vector3.new(0, ext.Y * 0.5, 0))
+			if not top then return end
+			card.Position = UDim2.fromOffset(math.floor(top.X + 0.5), math.floor(top.Y + 0.5))
+			-- pack the card like veil does: whichever rows are on stack from the bottom up
+			local y = 36
+			local rows = {}
+			if self._show.HealthBg then rows[#rows + 1] = { barBg, 3 } end
+			if self._show.Distance then rows[#rows + 1] = { subL, 12 } end
+			if self._show.Name then rows[#rows + 1] = { nameL, 14 } end
+			for _, r in ipairs(rows) do
+				y = y - r[2]
+				r[1].Position = UDim2.new(r[1] == barBg and 0.5 or 0, 0, 0, y)
+				y = y - 2
 			end
-			for jn, j in pairs(self._joints) do j.Position = UDim2.fromOffset(ox + joints[jn].X, oy + joints[jn].Y) end
+			if bottom then
+				local ox, oy = canvas.AbsoluteSize.X * 0.5, canvas.AbsoluteSize.Y
+				local dx, dy = bottom.X - ox, bottom.Y - oy
+				tracer.Position = UDim2.fromOffset(math.floor(ox), math.floor(oy))
+				tracer.Size = UDim2.fromOffset(1, math.floor(math.sqrt(dx * dx + dy * dy) + 0.5))
+				tracer.Rotation = -math.deg(math.atan2(dx, -dy))
+			end
 		end
 		function tab:SetColour(c)
 			self.Colour = c
-			outlineColour = c
-			for _, l in ipairs(self._skelLines) do l.BackgroundColor3 = c end
 			tracer.BackgroundColor3 = c
-			nameL.TextColor3 = c
-			self:_applyOutline()
+			if preview.Active == self then glowColour = c applyGlow() end
 		end
-		function tab:SetOutline(on) outlineOn = on and true or false self:_applyOutline() end
-		function tab:SetBoxStyle() end
+		function tab:SetOutline(on)
+			self._show.Outline = on and true or false
+			if preview.Active == self then glowOn = self._show.Outline applyGlow() end
+		end
 		function tab:SetText(which, text) local p = self.Parts[which] if p and p:IsA("TextLabel") then p.Text = text end end
 		function tab:SetHealth(frac)
 			frac = math.clamp(frac or 1, 0, 1)
-			hp.Size = UDim2.new(1, 0, frac, 0)
-			hp.BackgroundColor3 = Color3.fromRGB(math.floor(255 * (1 - frac)), math.floor(230 * frac + 25), 40)
+			bar.Size = UDim2.fromScale(frac, 1)
+			bar.BackgroundColor3 = Color3.fromRGB(math.clamp(math.floor(255 * (1 - frac)), 0, 255), math.clamp(math.floor(255 * frac), 0, 255), 0)
 		end
 		function tab:Set(settings)
 			for key, val in pairs(settings) do
 				if typeof(val) == "boolean" then
 					if key == "Box" or key == "Outline" or key == "Highlight" then self:SetOutline(val)
-					elseif self.Parts[key] then self.Parts[key].Visible = val end
+					elseif self.Parts[key] then self.Parts[key].Visible = val self._show[key] = val end
 				elseif typeof(val) == "Color3" then
 					if key == "Box" or key == "Outline" or key == "Highlight" or key == "Colour" then self:SetColour(val)
 					elseif key == "Name" then nameL.TextColor3 = val
-					elseif key == "Skeleton" then for _, l in ipairs(self._skelLines) do l.BackgroundColor3 = val end
-					elseif key == "Tracer" then tracer.BackgroundColor3 = val
-					elseif self.Parts[key] then self.Parts[key].BackgroundColor3 = val end
+					elseif key == "Tracer" then tracer.BackgroundColor3 = val end
 				end
 			end
 		end
+		function tab:SetBoxStyle() end
 
 		local tb = Create("TextButton", { Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, Text = "", AutoButtonColor = false, BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 1, LayoutOrder = i, ZIndex = 6, Parent = tabBar })
 		Corner(tb, 5); Pad(tb, 9, 9, 0, 0)
@@ -1976,15 +1981,21 @@ function GroupboxMethods:AddESPPreview(cfg)
 			Tween(self._label, { TextColor3 = Library.Theme.Accent }, 0.1)
 			Tween(self._btn, { BackgroundTransparency = 0.93 }, 0.1)
 			preview.Active = self
-			self:_applyOutline()
+			glowOn, glowColour = self._show.Outline, self.Colour
+			applyGlow()
 		end
 		tb.MouseButton1Click:Connect(function() tab:Select() end)
 		table.insert(preview.Tabs, tab)
 	end
 
-	-- keep every tab's overlay glued to the figure
 	Library:GiveSignal(RunService.RenderStepped:Connect(function()
 		if not canvas.Visible or not f:IsDescendantOf(ScreenGui) then return end
+		if dummy then
+			local ok, boxCf = pcall(function() return dummy:GetBoundingBox() end)
+			local pivot = ok and boxCf.Position or Vector3.zero
+			cam.CFrame = CFrame.new(pivot + Vector3.new(math.sin(yaw) * dist, dist * 0.1, math.cos(yaw) * dist), pivot)
+			for _, g in ipairs(glowParts) do if g.src.Parent then g.part.CFrame = g.src.CFrame end end
+		end
 		for _, t in ipairs(preview.Tabs) do if t.Page.Visible then t:_layout() end end
 	end))
 
@@ -2008,7 +2019,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 			floating = nil
 			return
 		end
-		local win = Create("Frame", { Size = UDim2.fromOffset(360, 330), Position = UDim2.new(0.5, -180, 0.5, -165), BackgroundTransparency = 0.05, ZIndex = 400, Parent = PopupLayer })
+		local win = Create("Frame", { Size = UDim2.fromOffset(380, 350), Position = UDim2.new(0.5, -190, 0.5, -175), BackgroundTransparency = 0.05, ZIndex = 400, Parent = PopupLayer })
 		Library:AddToRegistry(win, { BackgroundColor3 = "Main" })
 		Corner(win, 14)
 		local wst = Create("UIStroke", { Thickness = 1, Transparency = 0.15, Parent = win }); Library:AddToRegistry(wst, { Color = "Outline" })
@@ -2026,7 +2037,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 
 	function preview:GetTab(name) for _, t in ipairs(self.Tabs) do if t.Name == name then return t end end end
 	function preview:Set(name, settings) local t = self:GetTab(name) if t then t:Set(settings) end end
-	function preview:SetUser(userId) setUser(userId) end
+	function preview:SetUser(id) loadUser(tonumber(id) or userId) end
 	if preview.Tabs[1] then preview.Tabs[1]:Select() end
 	return preview
 end
