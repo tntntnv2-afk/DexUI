@@ -282,6 +282,38 @@ local function Shadow(frame, spread)
 	return holder
 end
 local PopupLayer = Create("Frame", { Name = "Popups", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 500, Parent = ScreenGui })
+-- dock a popup beside the window (right edge), level with its trigger, never over the content
+local function DockPopup(popup, trigger)
+	local win = nil
+	for _, w in ipairs(Library.Windows) do
+		if w.Frame and trigger:IsDescendantOf(w.Frame) then win = w.Frame break end
+	end
+	local x, y
+	if win then
+		local right = win.AbsolutePosition.X + win.AbsoluteSize.X
+		local screenW = ScreenGui.AbsoluteSize.X
+		if right + 12 + popup.AbsoluteSize.X <= screenW - 6 then
+			x = right + 12
+		else
+			x = win.AbsolutePosition.X - 12 - popup.AbsoluteSize.X
+		end
+		y = trigger.AbsolutePosition.Y
+		local top, bottom = win.AbsolutePosition.Y + 8, win.AbsolutePosition.Y + win.AbsoluteSize.Y - 8
+		y = math.clamp(y, top, math.max(top, bottom - popup.AbsoluteSize.Y))
+	else
+		x = trigger.AbsolutePosition.X
+		y = trigger.AbsolutePosition.Y + trigger.AbsoluteSize.Y + 6
+	end
+	popup.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
+	-- connector: a hairline from the trigger's edge to the popup
+	local con = popup:FindFirstChild("_connector") or Create("Frame", { Name = "_connector", Size = UDim2.fromOffset(12, 1), BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = popup.ZIndex, Parent = popup })
+	Library:AddToRegistry(con, { BackgroundColor3 = "Accent" })
+	local left = win and (x > win.AbsolutePosition.X)
+	con.AnchorPoint = Vector2.new(left and 1 or 0, 0)
+	con.Position = UDim2.new(left and 0 or 1, 0, 0, math.clamp(trigger.AbsolutePosition.Y + trigger.AbsoluteSize.Y * 0.5 - y, 6, math.max(6, popup.AbsoluteSize.Y - 6)))
+end
+Library.DockPopup = DockPopup
+
 local function PopupShell(width, z, radius, padding)
 	local root = Create("Frame", { Size = UDim2.new(0, width, 0, 0), BackgroundTransparency = 0.08, Visible = false, ZIndex = z or 60, Parent = PopupLayer })
 	Library:AddToRegistry(root, { BackgroundColor3 = "Main" })
@@ -566,35 +598,17 @@ function Library:CreateWindow(cfg)
 	end
 	window.Frame = main
 
-	-- aurora: slow drifting ember blobs behind everything; cards are glass over it
-	local aurora = Create("Frame", { Name = "Aurora", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 10, Parent = main })
-	local ribbons = {}
-	local specs = {
-		{ w = 720, h = 220, alpha = 0.86, phase = 0.0, speed = 0.05, spin = 4, key = "Accent" },
-		{ w = 520, h = 160, alpha = 0.9, phase = 2.1, speed = 0.07, spin = -6, key = "Accent" },
-		{ w = 420, h = 120, alpha = 0.94, phase = 4.2, speed = 0.09, spin = 5, key = "Font" },
-		{ w = 300, h = 300, alpha = 0.9, phase = 1.3, speed = 0.04, spin = 0, key = "Accent" },
-	}
-	for i, sp in ipairs(specs) do
-		local r = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(sp.w, sp.h), BackgroundTransparency = sp.alpha, BorderSizePixel = 0, Rotation = i * 30, ZIndex = 10, Parent = aurora })
-		Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = r })
-		self:AddToRegistry(r, { BackgroundColor3 = sp.key })
-		Create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.3, 0.35), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(0.7, 0.35), NumberSequenceKeypoint.new(1, 1) }), Parent = r })
-		ribbons[i] = { f = r, sp = sp, base = sp.alpha }
-	end
+	-- one soft ember glow low in the window; unrotated so the rounded clip holds it
+	local ember = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1.2, 0, 0.55, 0), Position = UDim2.new(0.5, 0, 1, 40), BackgroundTransparency = 0.93, BorderSizePixel = 0, ZIndex = 10, Parent = main })
+	Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = ember })
+	self:AddToRegistry(ember, { BackgroundColor3 = "Accent" })
+	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.45, 0.55), NumberSequenceKeypoint.new(1, 0.15) }), Parent = ember })
 	task.spawn(function()
 		local t = 0
-		while not Library.Unloaded and aurora.Parent do
-			local dt = task.wait(0.03)
-			t = t + dt
-			local W, H = main.AbsoluteSize.X, main.AbsoluteSize.Y
-			for i, rb in ipairs(ribbons) do
-				local sp = rb.sp
-				local a = t * sp.speed + sp.phase
-				rb.f.Position = UDim2.fromOffset(W * (0.5 + 0.38 * math.sin(a)), H * (0.5 + 0.34 * math.cos(a * 0.7 + i)))
-				rb.f.Rotation = i * 30 + t * sp.spin
-				rb.f.BackgroundTransparency = rb.base + 0.03 * math.sin(t * 0.6 + i)
-			end
+		while not Library.Unloaded and ember.Parent do
+			t = t + task.wait(0.05)
+			ember.BackgroundTransparency = 0.93 + 0.02 * math.sin(t * 0.7)
+			ember.Position = UDim2.new(0.5 + 0.03 * math.sin(t * 0.25), 0, 1, 40)
 		end
 	end)
 
@@ -1171,29 +1185,28 @@ function GroupboxMethods:AddToggle(idx, cfg)
 	cfg = cfg or {}
 	local f = row(self, ROW_H)
 	local hit = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Text = "", ZIndex = 5, Parent = f })
-	local sw = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(30, 16), Position = UDim2.new(0, 0, 0.5, 0), ZIndex = 5, Parent = f })
-	Library:AddToRegistry(sw, { BackgroundColor3 = "Element" }); Corner(sw, 8); local bs = Stroke(sw, "Outline")
+	local sw = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 0, 0.5, 0), ZIndex = 5, Parent = f })
+	Library:AddToRegistry(sw, { BackgroundColor3 = "Element" }); Corner(sw, 5); local bs = Stroke(sw, "Outline")
 	local fill = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ZIndex = 6, Parent = sw })
-	Corner(fill, 8); Library:AddToRegistry(fill, { BackgroundColor3 = "Accent" })
-	local knob = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(10, 10), Position = UDim2.new(0, 3, 0.5, 0), BackgroundColor3 = Color3.fromRGB(70, 70, 78), BorderSizePixel = 0, ZIndex = 7, Parent = sw })
-	Corner(knob, 5)
-	local kglow = Create("UIStroke", { Thickness = 3, Transparency = 1, Parent = knob })
-	Library:AddToRegistry(kglow, { Color = "Accent" })
+	Corner(fill, 5); Library:AddToRegistry(fill, { BackgroundColor3 = "Accent" })
+	local tick = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(12, 12), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1, ZIndex = 7, Parent = sw })
+	local t1 = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(4, 1.8), Position = UDim2.new(0.5, -3, 0.5, 1.5), Rotation = 45, BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 7, Parent = tick })
+	local t2 = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(8, 1.8), Position = UDim2.new(0.5, 1, 0.5, -0.5), Rotation = -45, BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 7, Parent = tick })
+	local tickScale = Create("UIScale", { Scale = 0, Parent = tick })
 	local l = Text(f, cfg.Text or idx, 12, false)
-	l.AnchorPoint = Vector2.new(0, 0.5); l.Position = UDim2.new(0, 40, 0.5, 0); l.Size = UDim2.new(1, -40, 0, LINE_H); l.ZIndex = 5
-	local fitLabel = function() bindLabelWidth(l, f, 40) end
+	l.AnchorPoint = Vector2.new(0, 0.5); l.Position = UDim2.new(0, 26, 0.5, 0); l.Size = UDim2.new(1, -26, 0, LINE_H); l.ZIndex = 5
+	local fitLabel = function() bindLabelWidth(l, f, 26) end
 	if cfg.Badge then
 		local bd = Badge(f, cfg.Badge)
-		task.defer(function() bd.Position = UDim2.new(0, 40 + l.TextBounds.X + 8, 0.5, 0) end)
+		task.defer(function() bd.Position = UDim2.new(0, 26 + l.TextBounds.X + 8, 0.5, 0) end)
 	end
 	AttachTooltip(f, cfg.Tooltip)
 	local obj = { Frame = f, Value = cfg.Default and true or false, Type = "Toggle", Idx = idx, Callback = cfg.Callback, _changed = {} }
 	local function render(anim)
 		local on = obj.Value
 		local t = anim and 0.18 or 0
-		Tween(fill, { BackgroundTransparency = on and 0.88 or 1 }, t)
-		Tween(knob, { Position = on and UDim2.new(1, -13, 0.5, 0) or UDim2.new(0, 3, 0.5, 0), BackgroundColor3 = on and Library.Theme.Accent or Color3.fromRGB(70, 70, 78) }, anim and 0.26 or 0, Enum.EasingStyle.Back)
-		Tween(kglow, { Transparency = on and 0.7 or 1 }, t)
+		Tween(fill, { BackgroundTransparency = on and 0 or 1 }, t)
+		Tween(tickScale, { Scale = on and 1 or 0 }, anim and 0.22 or 0, Enum.EasingStyle.Back)
 		bs.Color = on and Library.Theme.Accent or Library.Theme.Outline
 		Library.Registry[bs] = on and { Color = "Accent" } or { Color = "Outline" }
 		Tween(l, { TextColor3 = on and Library.Theme.Font or Library.Theme.FontDim }, t)
@@ -1336,6 +1349,7 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 		local h = math.clamp(n * 29 - 3, 0, 200)
 		scroll.Size = UDim2.new(1, 0, 0, h)
 		list.Size = UDim2.new(0, list.Size.X.Offset, 0, h + 12 + (cfg.Searchable and 31 or 0))
+		if list.Visible then task.defer(function() DockPopup(list, btn) end) end
 	end
 
 	local obj = { Frame = f, Values = cfg.Values or {}, Multi = cfg.Multi, Type = "Dropdown", Idx = idx, Callback = cfg.Callback, _changed = {} }
@@ -1402,12 +1416,11 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 		bstroke.Color = Library.Theme.Accent
 		bstroke.Transparency = 0.45
 		Library:_ClosePopups(list)
-		list.Size = UDim2.new(0, btn.AbsoluteSize.X, 0, 0)
-		local y = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 5
-		list.Position = UDim2.new(0, btn.AbsolutePosition.X, 0, y)
+		list.Size = UDim2.new(0, math.max(200, btn.AbsoluteSize.X), 0, 0)
 		build()
 		RaisePopup(list)
 		list.Visible = true
+		task.defer(function() DockPopup(list, btn) end)
 		local sc = list:FindFirstChildOfClass("UIScale") or Create("UIScale", { Parent = list })
 		sc.Scale = 0.95
 		Tween(sc, { Scale = 1 }, 0.2, Enum.EasingStyle.Quint)
@@ -1598,10 +1611,9 @@ function Library._AttachColorPicker(parentObj, parentFrame, idx, cfg)
 	swatch.MouseButton1Click:Connect(function()
 		if pop.Visible then pop.Visible = false return end
 		Library:_ClosePopups(pop)
-		local x = math.clamp(swatch.AbsolutePosition.X + swatch.AbsoluteSize.X - W, 8, math.max(8, ScreenGui.AbsoluteSize.X - W - 8))
-		pop.Position = UDim2.new(0, x, 0, swatch.AbsolutePosition.Y + swatch.AbsoluteSize.Y + 6)
 		RaisePopup(pop)
 		pop.Visible = true
+		task.defer(function() DockPopup(pop, swatch) end)
 		local sc = pop:FindFirstChildOfClass("UIScale") or Create("UIScale", { Parent = pop })
 		sc.Scale = 0.95
 		Tween(sc, { Scale = 1 }, 0.2, Enum.EasingStyle.Quint)
@@ -1712,9 +1724,9 @@ function Library._AttachKeyPicker(parentObj, parentFrame, idx, cfg)
 	btn.MouseButton2Click:Connect(function()
 		if menu.Visible then menu.Visible = false return end
 		Library:_ClosePopups(menu)
-		menu.Position = UDim2.new(0, btn.AbsolutePosition.X, 0, btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 5)
 		RaisePopup(menu)
 		menu.Visible = true
+		task.defer(function() DockPopup(menu, btn) end)
 	end)
 	Library:GiveSignal(UserInputService.InputBegan:Connect(function(inp, gpe)
 		if binding then
@@ -1766,23 +1778,22 @@ function GroupboxMethods:AddESPPreview(cfg)
 	local canvas = Create("Frame", { Size = UDim2.new(1, 0, 0, 190), Position = UDim2.new(0, 0, 0, 24), ClipsDescendants = true, ZIndex = 5, Parent = f })
 	Library:AddToRegistry(canvas, { BackgroundColor3 = "Well" }); Corner(canvas, 10); Stroke(canvas, "Outline")
 	do
-		local glow = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1.4, 0, 0.7, 0), Position = UDim2.new(0.5, 0, 1, 20), BackgroundTransparency = 0.88, BorderSizePixel = 0, ZIndex = 5, Parent = canvas })
+		local glow = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1.4, 0, 0.5, 0), Position = UDim2.new(0.5, 0, 1, 30), BackgroundTransparency = 0.94, BorderSizePixel = 0, ZIndex = 5, Parent = canvas })
 		Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = glow })
 		Library:AddToRegistry(glow, { BackgroundColor3 = "Accent" })
 		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.2) }), Parent = glow })
-		local vign = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 7, Parent = canvas })
-		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(1, 0.6) }), Parent = vign })
+
 	end
 	local vp = Create("ViewportFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Ambient = Color3.fromRGB(120, 120, 130), LightColor = Color3.fromRGB(255, 255, 255), LightDirection = Vector3.new(-1, -1.5, -1), ZIndex = 6, Parent = canvas })
 	local wm = Create("WorldModel", { Parent = vp })
 	local cam = Create("Camera", { FieldOfView = 40, Parent = vp })
 	vp.CurrentCamera = cam
-	vp.Ambient = Color3.fromRGB(70, 70, 80)
-	vp.LightColor = Color3.fromRGB(255, 240, 235)
-	vp.LightDirection = Vector3.new(-0.4, -1, -0.6)
-	-- stage: a dark disc the model stands on, with a thin accent rim
-	local stage = Create("Part", { Name = "_stage", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.2, 7, 7), CFrame = CFrame.new(0, -3.1, 0) * CFrame.Angles(0, 0, math.rad(90)), Anchored = true, Color = Color3.fromRGB(12, 12, 14), Material = Enum.Material.SmoothPlastic, Parent = wm })
-	local rim = Create("Part", { Name = "_rim", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 7.3, 7.3), CFrame = CFrame.new(0, -3.14, 0) * CFrame.Angles(0, 0, math.rad(90)), Anchored = true, Material = Enum.Material.Neon, Parent = wm })
+	vp.Ambient = Color3.fromRGB(150, 150, 160)
+	vp.LightColor = Color3.fromRGB(255, 255, 255)
+	vp.LightDirection = Vector3.new(-0.3, -1, -0.5)
+	-- stage: a thin dark disc under the feet with a hairline-thin accent edge
+	local stage = Create("Part", { Name = "_stage", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.12, 5.2, 5.2), CFrame = CFrame.new(0, -3.06, 0) * CFrame.Angles(0, 0, math.rad(90)), Anchored = true, Color = Color3.fromRGB(16, 16, 18), Material = Enum.Material.SmoothPlastic, Parent = wm })
+	local rim = Create("Part", { Name = "_rim", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 5.3, 5.3), CFrame = CFrame.new(0, -3.07, 0) * CFrame.Angles(0, 0, math.rad(90)), Anchored = true, Material = Enum.Material.SmoothPlastic, Parent = wm })
 	Library:AddToRegistry(rim, { Color = "Accent" })
 	local dummy = nil
 	pcall(function()
@@ -1866,7 +1877,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 		angle = angle + dt * 0.5
 		local boxCf, extents = dummy:GetBoundingBox()
 		local pivot = boxCf.Position
-		cam.CFrame = CFrame.new(pivot + Vector3.new(math.sin(angle) * dist, dist * 0.22, math.cos(angle) * dist), pivot + Vector3.new(0, -0.3, 0))
+		cam.CFrame = CFrame.new(pivot + Vector3.new(math.sin(angle) * dist, dist * 0.12, math.cos(angle) * dist), pivot + Vector3.new(0, -0.2, 0))
 		local hx, hy, hz = extents.X * 0.5, extents.Y * 0.5, extents.Z * 0.5
 		local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
 		for i = 0, 7 do
@@ -1907,10 +1918,10 @@ function GroupboxMethods:AddESPPreview(cfg)
 
 		local nameL = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 160, 0, 14), Position = UDim2.new(0.5, 0, 0.5, -80), BackgroundTransparency = 1, Text = "player", TextSize = 13, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(255, 255, 255), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, ZIndex = 9, Parent = page })
 		local distL = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 160, 0, 12), Position = UDim2.new(0.5, 0, 0.5, -66), BackgroundTransparency = 1, Text = "[42] 180/250", TextSize = 11, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(220, 220, 220), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, ZIndex = 9, Parent = page })
-		local weapon = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.new(0, 160, 0, 12), Position = UDim2.new(0.5, 0, 0.5, 74), BackgroundTransparency = 1, Text = "weapon", TextSize = 11, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(220, 220, 220), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, ZIndex = 9, Parent = page })
+		local weapon = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.new(0, 160, 0, 12), Position = UDim2.new(0.5, 0, 0.5, 74), BackgroundTransparency = 1, Text = "weapon", TextSize = 11, FontFace = Library.ESPFont, TextColor3 = Color3.fromRGB(220, 220, 220), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, Visible = false, ZIndex = 9, Parent = page })
 		local hpBg = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.new(0, 60, 0, 3), Position = UDim2.new(0.5, 0, 0.5, -52), BackgroundColor3 = Color3.fromRGB(0, 0, 0), BorderSizePixel = 1, BorderColor3 = Color3.fromRGB(0, 0, 0), ZIndex = 9, Parent = page })
 		local hp = Create("Frame", { Size = UDim2.fromScale(0.72, 1), BackgroundColor3 = Color3.fromRGB(71, 255, 0), BorderSizePixel = 0, ZIndex = 10, Parent = hpBg })
-		local tracer = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 1, 0, 70), Position = UDim2.new(0.5, 0, 1, 0), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, ZIndex = 8, Parent = page })
+		local tracer = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(0, 1, 0, 70), Position = UDim2.new(0.5, 0, 1, 0), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0, Visible = false, ZIndex = 8, Parent = page })
 		local tab = { Name = name, Page = page, Parts = { Box = box, BoxStroke = boxStroke, Name = nameL, Distance = distL, HealthBg = hpBg, Health = hp, Tracer = tracer, Weapon = weapon } }
 		preview._tracked = preview._tracked or {}
 		table.insert(preview._tracked, tab)
