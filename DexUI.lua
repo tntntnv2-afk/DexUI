@@ -1770,12 +1770,12 @@ end
 function GroupboxMethods:AddESPPreview(cfg)
 	cfg = cfg or {}
 	local tabsCfg = cfg.Tabs or { "Enemy", "Team" }
-	local f = row(self, 214, true)
+	local f = row(self, 244, true)
 	local tabBar = Create("Frame", { Size = UDim2.new(0, 0, 0, 20), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, ZIndex = 5, Parent = f })
 	Corner(tabBar, 7); local tbs = Stroke(tabBar, "Outline")
 	Pad(tabBar, 2, 2, 2, 2)
 	Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = tabBar })
-	local canvas = Create("Frame", { Size = UDim2.new(1, 0, 0, 190), Position = UDim2.new(0, 0, 0, 24), ClipsDescendants = true, ZIndex = 5, Parent = f })
+	local canvas = Create("Frame", { Size = UDim2.new(1, 0, 0, 220), Position = UDim2.new(0, 0, 0, 24), ClipsDescendants = true, ZIndex = 5, Parent = f })
 	Library:AddToRegistry(canvas, { BackgroundColor3 = "Well" }); Corner(canvas, 10); Stroke(canvas, "Outline")
 	do
 		local glow = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1.4, 0, 0.5, 0), Position = UDim2.new(0.5, 0, 1, 30), BackgroundTransparency = 0.94, BorderSizePixel = 0, ZIndex = 5, Parent = canvas })
@@ -1792,7 +1792,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 	vp.LightColor = Color3.fromRGB(255, 255, 255)
 	vp.LightDirection = Vector3.new(-0.3, -1, -0.5)
 	-- stage: a thin dark disc under the feet with a hairline-thin accent edge
-	local stage = Create("Part", { Name = "_stage", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.12, 5.2, 5.2), CFrame = CFrame.new(0, -3.06, 0) * CFrame.Angles(0, 0, math.rad(90)), Anchored = true, Color = Color3.fromRGB(16, 16, 18), Material = Enum.Material.SmoothPlastic, Parent = wm })
+	local stage = Create("Part", { Name = "_stage", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.12, 5.2, 5.2), CFrame = CFrame.new(0, -3.06, 0) * CFrame.Angles(0, 0, math.rad(90)), Anchored = true, Color = Color3.fromRGB(28, 28, 32), Material = Enum.Material.SmoothPlastic, Parent = wm })
 	local rim = Create("Part", { Name = "_rim", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 5.3, 5.3), CFrame = CFrame.new(0, -3.07, 0) * CFrame.Angles(0, 0, math.rad(90)), Anchored = true, Material = Enum.Material.SmoothPlastic, Parent = wm })
 	Library:AddToRegistry(rim, { Color = "Accent" })
 	local dummy = nil
@@ -1814,7 +1814,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 	end
 	local preview = { Frame = f, Tabs = {}, Active = nil, _tracked = {} }
 	local angle = 0
-	local dist = 9
+	local dist = 7
 	canvas.Active = true
 	canvas.InputChanged:Connect(function(inp)
 		if inp.UserInputType == Enum.UserInputType.MouseWheel then
@@ -1834,7 +1834,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 		if floating then
 			canvas.Parent = f
 			canvas.Position = UDim2.new(0, 0, 0, 24)
-			canvas.Size = UDim2.new(1, 0, 0, 190)
+			canvas.Size = UDim2.new(1, 0, 0, 220)
 			if floating._shadow then floating._shadow:Destroy() end
 			floating.Frame:Destroy()
 			floating = nil
@@ -1874,7 +1874,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 	end
 	local spin = Library:GiveSignal(RunService.RenderStepped:Connect(function(dt)
 		if not canvas.Visible or not f:IsDescendantOf(ScreenGui) then return end
-		angle = angle + dt * 0.5
+		angle = angle + dt * 0.35
 		local boxCf, extents = dummy:GetBoundingBox()
 		local pivot = boxCf.Position
 		cam.CFrame = CFrame.new(pivot + Vector3.new(math.sin(angle) * dist, dist * 0.12, math.cos(angle) * dist), pivot + Vector3.new(0, -0.2, 0))
@@ -2361,4 +2361,188 @@ return SaveManager
 
 end)()
 
-return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager }
+local Spotify = (function()
+local HttpService = game:GetService("HttpService")
+
+local Spotify = { Library = nil, Token = "", ClientId = "", RedirectUri = "http://localhost:8888/callback", State = {}, Polling = false, _thread = nil }
+
+local function httpRequest(opts)
+	local fn = (type(request) == "function" and request) or (type(http_request) == "function" and http_request) or (syn and syn.request) or (fluxus and fluxus.request)
+	if not fn then return nil, "this executor has no request function" end
+	local ok, res = pcall(fn, opts)
+	if not ok then return nil, tostring(res) end
+	return res
+end
+
+function Spotify:SetLibrary(lib) self.Library = lib end
+
+function Spotify:_call(method, path, body)
+	if self.Token == "" then return nil, "no token" end
+	local res, err = httpRequest({
+		Url = "https://api.spotify.com/v1" .. path,
+		Method = method,
+		Headers = { ["Authorization"] = "Bearer " .. self.Token, ["Content-Type"] = "application/json" },
+		Body = body and HttpService:JSONEncode(body) or nil,
+	})
+	if not res then return nil, err end
+	local code = res.StatusCode or res.status or 0
+	if code == 401 then return nil, "token expired or invalid" end
+	if code == 403 then return nil, "spotify premium is required for playback control" end
+	if code == 404 then return nil, "no active device - start playing on a device first" end
+	if code >= 400 then return nil, "http " .. tostring(code) end
+	local text = res.Body or res.body or ""
+	if text == "" then return {} end
+	local ok, data = pcall(HttpService.JSONDecode, HttpService, text)
+	return ok and data or {}
+end
+
+function Spotify:Refresh()
+	local data, err = self:_call("GET", "/me/player")
+	if not data then self.State.error = err return false end
+	local s = self.State
+	s.error = nil
+	s.playing = data.is_playing == true
+	s.progress = data.progress_ms or 0
+	s.shuffle = data.shuffle_state == true
+	s.repeatMode = data.repeat_state or "off"
+	if data.item then
+		local artists = {}
+		for _, a in ipairs(data.item.artists or {}) do artists[#artists + 1] = a.name end
+		s.track = data.item.name or ""
+		s.artist = table.concat(artists, ", ")
+		s.duration = data.item.duration_ms or 0
+		s.album = data.item.album and data.item.album.name or ""
+	else
+		s.track, s.artist, s.duration, s.album = "", "", 0, ""
+	end
+	if data.device then s.device = data.device.name s.volume = data.device.volume_percent end
+	return true
+end
+
+function Spotify:Play() return self:_call("PUT", "/me/player/play") end
+function Spotify:Pause() return self:_call("PUT", "/me/player/pause") end
+function Spotify:Toggle()
+	if self.State.playing then return self:Pause() else return self:Play() end
+end
+function Spotify:Next() return self:_call("POST", "/me/player/next") end
+function Spotify:Previous() return self:_call("POST", "/me/player/previous") end
+function Spotify:SetVolume(v) return self:_call("PUT", "/me/player/volume?volume_percent=" .. math.floor(math.clamp(v, 0, 100))) end
+function Spotify:SetShuffle(on) return self:_call("PUT", "/me/player/shuffle?state=" .. tostring(on and true or false)) end
+function Spotify:SetRepeat(mode) return self:_call("PUT", "/me/player/repeat?state=" .. mode) end
+function Spotify:Seek(ms) return self:_call("PUT", "/me/player/seek?position_ms=" .. math.floor(math.max(ms, 0))) end
+
+function Spotify:LoginUrl()
+	if self.ClientId == "" then return nil end
+	local scope = HttpService:UrlEncode("user-read-playback-state user-modify-playback-state user-read-currently-playing")
+	return string.format("https://accounts.spotify.com/authorize?client_id=%s&response_type=token&redirect_uri=%s&scope=%s",
+		self.ClientId, HttpService:UrlEncode(self.RedirectUri), scope)
+end
+
+local function fmtTime(ms)
+	local s = math.floor((ms or 0) / 1000)
+	return string.format("%d:%02d", math.floor(s / 60), s % 60)
+end
+
+function Spotify:BuildSection(tab)
+	local Library = self.Library
+	local gb = tab:AddLeftGroupbox("Spotify")
+
+	local nowTitle = gb:AddLabel("not connected")
+	local nowArtist = gb:AddLabel("paste a token below, then refresh")
+	local progress = gb:AddSlider("Spotify_Progress", { Text = "position", Default = 0, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v)
+		if self._userSeek and self.State.duration and self.State.duration > 0 then
+			task.spawn(function() self:Seek(self.State.duration * (v / 100)) end)
+		end
+	end })
+	local timeLabel = gb:AddLabel("0:00 / 0:00")
+
+	local function report(ok, err)
+		if not ok and err then Library:Notify({ Title = "spotify", Description = tostring(err), Time = 4 }) end
+	end
+	local function paint()
+		local s = self.State
+		if s.error then
+			nowTitle:SetText("spotify: " .. s.error)
+			nowArtist:SetText("")
+			return
+		end
+		if s.track and s.track ~= "" then
+			nowTitle:SetText((s.playing and "playing  " or "paused  ") .. s.track)
+			nowArtist:SetText(s.artist .. (s.device and ("   on " .. s.device) or ""))
+			if s.duration and s.duration > 0 then
+				self._userSeek = false
+				progress:SetValue(math.floor((s.progress / s.duration) * 100), true)
+				self._userSeek = true
+			end
+			timeLabel:SetText(fmtTime(s.progress) .. " / " .. fmtTime(s.duration))
+		else
+			nowTitle:SetText("nothing playing")
+			nowArtist:SetText(s.device and ("device: " .. s.device) or "start playback on any device")
+		end
+		if s.volume and Library.Options.Spotify_Volume then Library.Options.Spotify_Volume:SetValue(s.volume, true) end
+		if Library.Toggles.Spotify_Shuffle and Library.Toggles.Spotify_Shuffle.Value ~= s.shuffle then Library.Toggles.Spotify_Shuffle:SetValue(s.shuffle, true) end
+	end
+	self._userSeek = true
+
+	gb:AddButton({ Text = "previous", Func = function() task.spawn(function() report(self:Previous()) task.wait(0.4) self:Refresh() paint() end) end })
+		:AddButton({ Text = "play / pause", Func = function() task.spawn(function() report(self:Toggle()) task.wait(0.4) self:Refresh() paint() end) end })
+	gb:AddButton({ Text = "next", Func = function() task.spawn(function() report(self:Next()) task.wait(0.4) self:Refresh() paint() end) end })
+		:AddButton({ Text = "refresh", Func = function() task.spawn(function() self:Refresh() paint() end) end })
+
+	gb:AddSlider("Spotify_Volume", { Text = "volume", Default = 50, Min = 0, Max = 100, Rounding = 0, Suffix = "%", Callback = function(v)
+		if self._volDebounce then return end
+		self._volDebounce = true
+		task.delay(0.25, function() self._volDebounce = false task.spawn(function() report(self:SetVolume(v)) end) end)
+	end })
+	gb:AddToggle("Spotify_Shuffle", { Text = "shuffle", Default = false, Callback = function(v) task.spawn(function() report(self:SetShuffle(v)) end) end })
+	gb:AddDropdown("Spotify_Repeat", { Text = "repeat", Values = { "off", "context", "track" }, Default = 1, Callback = function(v)
+		if type(v) == "table" then for k, on in pairs(v) do if on then v = k break end end end
+		task.spawn(function() report(self:SetRepeat(v)) end)
+	end })
+	gb:AddToggle("Spotify_Poll", { Text = "live update (every 3s)", Default = true, Callback = function(v)
+		self.Polling = v
+		if v and not self._thread then
+			self._thread = task.spawn(function()
+				while self.Polling and not Library.Unloaded do
+					if self.Token ~= "" then pcall(function() self:Refresh() paint() end) end
+					task.wait(3)
+				end
+				self._thread = nil
+			end)
+		end
+	end })
+
+	local auth = tab:AddRightGroupbox("Spotify login")
+	auth:AddInput("Spotify_Token", { Text = "access token", Placeholder = "BQ...", Finished = true, Callback = function(v)
+		self.Token = tostring(v or "")
+		task.spawn(function() self:Refresh() paint() end)
+	end })
+	auth:AddInput("Spotify_ClientId", { Text = "client id (from developer.spotify.com)", Placeholder = "32 characters", Finished = true, Callback = function(v) self.ClientId = tostring(v or "") end })
+	auth:AddInput("Spotify_Redirect", { Text = "redirect uri (must match your app)", Default = self.RedirectUri, Finished = true, Callback = function(v) self.RedirectUri = tostring(v or "") end })
+	auth:AddButton({ Text = "print login link to console", Func = function()
+		local url = self:LoginUrl()
+		if not url then Library:Notify({ Title = "spotify", Description = "enter your client id first", Time = 4 }) return end
+		print("[spotify] open this in a browser, log in, then copy access_token from the url you land on:")
+		print(url)
+		pcall(function() setclipboard(url) end)
+		Library:Notify({ Title = "spotify", Description = "login link printed and copied", Time = 4 })
+	end })
+	auth:AddLabel("tokens from the login link last 1 hour. playback control needs premium.", true)
+
+	self.Polling = true
+	self._thread = task.spawn(function()
+		while self.Polling and not Library.Unloaded do
+			if self.Token ~= "" then pcall(function() self:Refresh() paint() end) end
+			task.wait(3)
+		end
+		self._thread = nil
+	end)
+	Library:OnUnload(function() self.Polling = false end)
+	return gb
+end
+
+return Spotify
+
+end)()
+
+return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager, Spotify = Spotify }
