@@ -2620,7 +2620,17 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
-local Cosmetics = { Library = nil, On = {}, Colour = {}, Alpha = {}, Rainbow = false, CharAlpha = 0, _conn = nil, _items = {}, _folder = nil }
+local Cosmetics = { Library = nil, On = {}, Colour = {}, Alpha = {}, Rainbow = false, CharAlpha = 0, _conn = nil, _items = {}, _folder = nil,
+	Assets = {
+		HaloMesh = 94295002298033,
+		WingLeftMesh = 107575539959305,
+		WingRightMesh = 105091027171512,
+		FeatherTexture = 91647142310779,
+		CircleOuter = 137530322837065,
+		CircleInner = 90176716791462,
+		FloorGlow = 88776888306340,
+	} }
+local function assetId(n) n = tonumber(n) or 0 if n > 0 then return "rbxassetid://" .. n end return nil end
 
 local DEFAULTS = {
 	Halo = { colour = Color3.fromRGB(255, 215, 110), alpha = 0 },
@@ -2665,6 +2675,16 @@ end
 
 function Cosmetics:_buildHalo()
 	local f = self:_folderRef()
+	local mesh = assetId(self.Assets.HaloMesh)
+	if mesh then
+		local p = part({ Name = "_halo", Size = Vector3.new(1, 1, 1), Parent = f })
+		local sm = Instance.new("SpecialMesh")
+		sm.MeshType = Enum.MeshType.FileMesh
+		sm.MeshId = mesh
+		sm.Scale = Vector3.new(1.15, 1.15, 1.15)
+		sm.Parent = p
+		return { kind = "Halo", mesh = p }
+	end
 	local segs = {}
 	local N, R = 28, 1.15
 	for i = 1, N do
@@ -2678,6 +2698,21 @@ end
 
 function Cosmetics:_buildWings()
 	local f = self:_folderRef()
+	local ml, mr, tex = assetId(self.Assets.WingLeftMesh), assetId(self.Assets.WingRightMesh), assetId(self.Assets.FeatherTexture)
+	if ml and mr then
+		local wings = {}
+		for side, id in pairs({ [-1] = ml, [1] = mr }) do
+			local p = part({ Name = "_wing", Size = Vector3.new(1, 1, 1), Material = Enum.Material.Neon, Parent = f })
+			local sm = Instance.new("SpecialMesh")
+			sm.MeshType = Enum.MeshType.FileMesh
+			sm.MeshId = id
+			if tex then sm.TextureId = tex end
+			sm.Scale = Vector3.new(0.95, 0.95, 0.95)
+			sm.Parent = p
+			wings[#wings + 1] = { p = p, side = side }
+		end
+		return { kind = "Wings", meshWings = wings }
+	end
 	local feathers = {}
 	local spec = { { 3.2, 0.7, 8 }, { 2.9, 0.62, 24 }, { 2.5, 0.55, 42 }, { 2.0, 0.48, 60 }, { 1.5, 0.4, 78 } }
 	for side = -1, 1, 2 do
@@ -2691,6 +2726,22 @@ end
 
 function Cosmetics:_buildCircle()
 	local f = self:_folderRef()
+	local outer, inner, glow = assetId(self.Assets.CircleOuter), assetId(self.Assets.CircleInner), assetId(self.Assets.FloorGlow)
+	if outer or inner then
+		local layers = {}
+		local function layer(tex, size, spin, alphaBoost)
+			local p = part({ Name = "_circle", Size = Vector3.new(size, 0.05, size), Transparency = 1, Material = Enum.Material.SmoothPlastic, Parent = f })
+			local d = Instance.new("Decal")
+			d.Face = Enum.NormalId.Top
+			d.Texture = tex
+			d.Parent = p
+			layers[#layers + 1] = { p = p, d = d, spin = spin, alphaBoost = alphaBoost or 0 }
+		end
+		if glow then layer(glow, 9, 0, 0.5) end
+		if outer then layer(outer, 7.2, 0.35) end
+		if inner then layer(inner, 7.2, -0.6) end
+		return { kind = "Circle", layers = layers }
+	end
 	local rings = {}
 	for _, r in ipairs({ 3.2, 2.35 }) do
 		local N = math.floor(r * 12)
@@ -2726,26 +2777,43 @@ function Cosmetics:_update(dt)
 		if kind == "Halo" and head then
 			local centre = head.CFrame * CFrame.new(0, 1.05 + math.sin(t * 1.4) * 0.06, 0)
 			local spin = t * 0.8
-			for _, s in ipairs(item.segs) do
+			if item.mesh then
+				item.mesh.CFrame = CFrame.new(centre.Position) * CFrame.Angles(0, spin, 0)
+				item.mesh.Color = colour item.mesh.Transparency = alpha
+			end
+			for _, s in ipairs(item.segs or {}) do
 				local a = s.a + spin
 				s.p.CFrame = centre * CFrame.Angles(0, a, 0) * CFrame.new(item.radius, 0, 0) * CFrame.Angles(0, math.rad(90), 0)
 				s.p.Color = colour s.p.Transparency = alpha
 			end
 		elseif kind == "Wings" and torso then
-			local base = torso.CFrame * CFrame.new(0, 0.4, 0.55)
-			local flap = math.sin(t * 2.2) * math.rad(14)
-			for _, fe in ipairs(item.feathers) do
+			local flap = math.sin(t * 2.0) * math.rad(12)
+			if item.meshWings then
+				for _, w in ipairs(item.meshWings) do
+					local root = torso.CFrame * CFrame.new(w.side * 0.2, 0.45, 0.55)
+					w.p.CFrame = root * CFrame.Angles(0, w.side * math.rad(-32) + w.side * flap, 0) * CFrame.Angles(math.rad(8), 0, 0)
+					w.p.Color = colour w.p.Transparency = alpha
+				end
+			end
+			local base = torso.CFrame * CFrame.new(0, 0.5, 0.6)
+			for _, fe in ipairs(item.feathers or {}) do
 				local sweep = fe.angle + flap * (1 - fe.idx * 0.12)
-				local cf = base * CFrame.Angles(0, math.rad(fe.side * 22), 0) * CFrame.Angles(0, 0, fe.side * sweep) * CFrame.new(fe.side * fe.len * 0.5, 0, 0)
+				local cf = base * CFrame.Angles(0, math.rad(fe.side * -30), 0) * CFrame.Angles(0, 0, fe.side * -sweep) * CFrame.new(fe.side * fe.len * 0.5, 0, 0)
 				fe.p.CFrame = cf
 				fe.p.Color = colour fe.p.Transparency = alpha
 			end
 		elseif kind == "Circle" then
 			local hum = ch:FindFirstChildOfClass("Humanoid")
 			local hip = hum and hum.HipHeight or 2
-			local floor = hrp.CFrame * CFrame.new(0, -(hip + hrp.Size.Y * 0.5) + 0.06, 0)
-			floor = CFrame.new(floor.Position)
-			for ri, ring in ipairs(item.rings) do
+			local floor = CFrame.new(hrp.Position - Vector3.new(0, hip + hrp.Size.Y * 0.5 - 0.06, 0))
+			if item.layers then
+				for _, ly in ipairs(item.layers) do
+					ly.p.CFrame = floor * CFrame.Angles(0, t * ly.spin, 0)
+					ly.d.Color3 = colour
+					ly.d.Transparency = math.clamp(alpha + ly.alphaBoost, 0, 1)
+				end
+			end
+			for ri, ring in ipairs(item.rings or {}) do
 				local spin = t * (ri == 1 and 0.6 or -0.9)
 				for _, s in ipairs(ring.segs) do
 					local a = s.a + spin
@@ -2753,7 +2821,7 @@ function Cosmetics:_update(dt)
 					s.p.Color = colour s.p.Transparency = alpha
 				end
 			end
-			for _, sp in ipairs(item.spokes) do
+			for _, sp in ipairs(item.spokes or {}) do
 				sp.p.CFrame = floor * CFrame.Angles(0, sp.a - t * 0.9, 0) * CFrame.new(0, 0, 2.35 * 0.5)
 				sp.p.Color = colour sp.p.Transparency = alpha
 			end
@@ -2787,6 +2855,9 @@ function Cosmetics:_destroyItem(kind)
 	if item.rings then for _, r in ipairs(item.rings) do for _, s in ipairs(r.segs) do kill(s.p) end end end
 	if item.spokes then for _, s in ipairs(item.spokes) do kill(s.p) end end
 	if item.ball then kill(item.ball) end
+	if item.mesh then kill(item.mesh) end
+	if item.meshWings then for _, w in ipairs(item.meshWings) do kill(w.p) end end
+	if item.layers then for _, ly in ipairs(item.layers) do kill(ly.p) end end
 	self._items[kind] = nil
 end
 
