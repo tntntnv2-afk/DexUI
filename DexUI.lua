@@ -1806,9 +1806,41 @@ function GroupboxMethods:AddESPPreview(cfg)
 	local IMG = 190
 	local BW, BH = 76, 158
 	local body = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(BW, BH), Position = UDim2.new(0.5, 0, 0.5, 6), BackgroundTransparency = 1, ZIndex = 6, Parent = canvas })
+	-- glow layers sit behind the avatar: tinted copies of the same render, offset in a ring
+	local glowLayers = {}
+	local GLOW_OFFSETS = {}
+	for i = 0, 7 do
+		local a = math.rad(i * 45)
+		GLOW_OFFSETS[#GLOW_OFFSETS + 1] = { Vector2.new(math.cos(a) * 1.6, math.sin(a) * 1.6), 0.15 }
+	end
+	for i = 0, 7 do
+		local a = math.rad(i * 45 + 22.5)
+		GLOW_OFFSETS[#GLOW_OFFSETS + 1] = { Vector2.new(math.cos(a) * 3.4, math.sin(a) * 3.4), 0.72 }
+	end
+	for _, spec in ipairs(GLOW_OFFSETS) do
+		local g = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(IMG, IMG), Position = UDim2.new(0.5, spec[1].X, 0.5, 2 + spec[1].Y), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, ImageColor3 = Color3.fromRGB(255, 0, 0), ImageTransparency = spec[2], Visible = false, ZIndex = 5, Parent = body })
+		glowLayers[#glowLayers + 1] = g
+	end
 	local avatar = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(IMG, IMG), Position = UDim2.new(0.5, 0, 0.5, 2), BackgroundTransparency = 1, ScaleType = Enum.ScaleType.Fit, ZIndex = 6, Parent = body })
+	local function applyImage(img)
+		avatar.Image = img
+		for _, g in ipairs(glowLayers) do g.Image = img end
+	end
 	local function setUser(userId)
-		avatar.Image = string.format("rbxthumb://type=AvatarThumbnail&id=%d&w=420&h=420", tonumber(userId) or 5508585538)
+		local id = tonumber(userId) or 5508585538
+		applyImage(string.format("rbxthumb://type=AvatarThumbnail&id=%d&w=420&h=420", id))
+		task.spawn(function()
+			for _ = 1, 8 do
+				local ok, content, ready = pcall(function()
+					return Players:GetUserThumbnailAsync(id, Enum.ThumbnailType.AvatarThumbnail, Enum.ThumbnailSize.Size420x420)
+				end)
+				if ok and content and content ~= "" then
+					applyImage(content)
+					if ready then return end
+				end
+				task.wait(1)
+			end
+		end)
 	end
 	setUser(cfg.UserId or 5508585538)
 	-- joints as proportions of the body box (typical R15 full-body render)
@@ -1836,14 +1868,9 @@ function GroupboxMethods:AddESPPreview(cfg)
 	for i, name in ipairs(tabsCfg) do
 		local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 8, Parent = canvas })
 		local PAD = 6
-		-- box (full)
-		local box = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(BW + PAD * 2, BH + PAD * 2), BackgroundTransparency = 1, ZIndex = 9, Parent = page })
-		local boxShadow = Create("UIStroke", { Thickness = 3, Color = Color3.new(0, 0, 0), Transparency = 0.6, Parent = box })
-		local boxStroke = Create("UIStroke", { Thickness = 1.5, Color = Color3.fromRGB(255, 60, 60), Parent = box })
-		-- box (corners)
-		local corners = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(BW + PAD * 2, BH + PAD * 2), BackgroundTransparency = 1, Visible = false, ZIndex = 9, Parent = page })
-		local cornerBars = {}
-		for ci = 1, 8 do cornerBars[ci] = Create("Frame", { BackgroundColor3 = Color3.fromRGB(255, 60, 60), BorderSizePixel = 0, ZIndex = 10, Parent = corners }) end
+		-- outline: the glow copies behind the avatar, in this tab's colour
+		local outlineOn = true
+		local outlineColour = Color3.fromRGB(255, 60, 60)
 		-- text
 		local function esptext(sz, bold)
 			local t = Create("TextLabel", { BackgroundTransparency = 1, TextSize = sz, FontFace = bold and Library.FontFaceBold or Library.FontFace, TextColor3 = Color3.new(1, 1, 1), TextStrokeColor3 = Color3.new(0, 0, 0), TextStrokeTransparency = 0.15, ZIndex = 11, Parent = page })
@@ -1871,34 +1898,28 @@ function GroupboxMethods:AddESPPreview(cfg)
 			joint[jn] = j
 		end
 
-		local tab = { Name = name, Page = page, BoxStyle = "full", _boxOn = true, Colour = Color3.fromRGB(255, 60, 60),
-			Parts = { Box = box, BoxStroke = boxStroke, Corners = corners, Name = nameL, Distance = distL, Weapon = weapon, HealthBg = hpBg, Health = hp, Tracer = tracer, Skeleton = skel },
-			_cornerBars = cornerBars, _skelLines = skelLines, _joints = joint }
+		local tab = { Name = name, Page = page, Colour = Color3.fromRGB(255, 60, 60),
+			Parts = { Name = nameL, Distance = distL, Weapon = weapon, HealthBg = hpBg, Health = hp, Tracer = tracer, Skeleton = skel },
+			_skelLines = skelLines, _joints = joint }
+		function tab:_applyOutline()
+			if preview.Active ~= self then return end
+			for _, g in ipairs(glowLayers) do
+				g.Visible = outlineOn
+				g.ImageColor3 = outlineColour
+			end
+		end
 
 		function tab:_layout()
 			local cx = canvas.AbsoluteSize.X * 0.5
 			local by = body.AbsolutePosition.Y - canvas.AbsolutePosition.Y + BH * 0.5
 			local top, bottom = by - BH * 0.5 - PAD, by + BH * 0.5 + PAD
 			local left = cx - BW * 0.5 - PAD
-			box.Position = UDim2.fromOffset(cx, by)
-			corners.Position = UDim2.fromOffset(cx, by)
 			nameL.Position = UDim2.fromOffset(cx, top - 4)
 			distL.Position = UDim2.fromOffset(cx, bottom + 3)
 			weapon.Position = UDim2.fromOffset(cx, bottom + 15)
 			hpBg.Position = UDim2.fromOffset(left - 5, by)
 			tracer.Position = UDim2.new(0.5, 0, 1, 0)
 			tracer.Size = UDim2.fromOffset(1, canvas.AbsoluteSize.Y - bottom)
-			local arm = 14
-			local W, H = BW + PAD * 2, BH + PAD * 2
-			local cb = self._cornerBars
-			cb[1].Position = UDim2.fromOffset(0, 0) cb[1].Size = UDim2.fromOffset(arm, 1.5)
-			cb[2].Position = UDim2.fromOffset(0, 0) cb[2].Size = UDim2.fromOffset(1.5, arm)
-			cb[3].Position = UDim2.fromOffset(W - arm, 0) cb[3].Size = UDim2.fromOffset(arm, 1.5)
-			cb[4].Position = UDim2.fromOffset(W - 1.5, 0) cb[4].Size = UDim2.fromOffset(1.5, arm)
-			cb[5].Position = UDim2.fromOffset(0, H - 1.5) cb[5].Size = UDim2.fromOffset(arm, 1.5)
-			cb[6].Position = UDim2.fromOffset(0, H - arm) cb[6].Size = UDim2.fromOffset(1.5, arm)
-			cb[7].Position = UDim2.fromOffset(W - arm, H - 1.5) cb[7].Size = UDim2.fromOffset(arm, 1.5)
-			cb[8].Position = UDim2.fromOffset(W - 1.5, H - arm) cb[8].Size = UDim2.fromOffset(1.5, arm)
 			local ox, oy = body.AbsolutePosition.X - canvas.AbsolutePosition.X, body.AbsolutePosition.Y - canvas.AbsolutePosition.Y
 			for bi, pair in ipairs(bones) do
 				local a, b = joints[pair[1]], joints[pair[2]]
@@ -1912,17 +1933,14 @@ function GroupboxMethods:AddESPPreview(cfg)
 		end
 		function tab:SetColour(c)
 			self.Colour = c
-			boxStroke.Color = c
-			for _, b in ipairs(self._cornerBars) do b.BackgroundColor3 = c end
+			outlineColour = c
 			for _, l in ipairs(self._skelLines) do l.BackgroundColor3 = c end
 			tracer.BackgroundColor3 = c
 			nameL.TextColor3 = c
+			self:_applyOutline()
 		end
-		function tab:SetBoxStyle(style)
-			self.BoxStyle = style
-			box.Visible = self._boxOn and style == "full"
-			corners.Visible = self._boxOn and style == "corner"
-		end
+		function tab:SetOutline(on) outlineOn = on and true or false self:_applyOutline() end
+		function tab:SetBoxStyle() end
 		function tab:SetText(which, text) local p = self.Parts[which] if p and p:IsA("TextLabel") then p.Text = text end end
 		function tab:SetHealth(frac)
 			frac = math.clamp(frac or 1, 0, 1)
@@ -1932,10 +1950,10 @@ function GroupboxMethods:AddESPPreview(cfg)
 		function tab:Set(settings)
 			for key, val in pairs(settings) do
 				if typeof(val) == "boolean" then
-					if key == "Box" then self._boxOn = val self:SetBoxStyle(self.BoxStyle)
+					if key == "Box" or key == "Outline" or key == "Highlight" then self:SetOutline(val)
 					elseif self.Parts[key] then self.Parts[key].Visible = val end
 				elseif typeof(val) == "Color3" then
-					if key == "Box" or key == "Colour" then self:SetColour(val)
+					if key == "Box" or key == "Outline" or key == "Highlight" or key == "Colour" then self:SetColour(val)
 					elseif key == "Name" then nameL.TextColor3 = val
 					elseif key == "Skeleton" then for _, l in ipairs(self._skelLines) do l.BackgroundColor3 = val end
 					elseif key == "Tracer" then tracer.BackgroundColor3 = val
@@ -1958,6 +1976,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 			Tween(self._label, { TextColor3 = Library.Theme.Accent }, 0.1)
 			Tween(self._btn, { BackgroundTransparency = 0.93 }, 0.1)
 			preview.Active = self
+			self:_applyOutline()
 		end
 		tb.MouseButton1Click:Connect(function() tab:Select() end)
 		table.insert(preview.Tabs, tab)
