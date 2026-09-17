@@ -1798,7 +1798,11 @@ function GroupboxMethods:AddESPPreview(cfg)
 	end
 
 	-- 3D model
-	local vp = Create("ViewportFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Ambient = Color3.fromRGB(190, 190, 200), LightColor = Color3.fromRGB(255, 255, 255), LightDirection = Vector3.new(-0.5, -1, -0.8), ZIndex = 6, Parent = canvas })
+	local glowVp = Create("ViewportFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Ambient = Color3.fromRGB(255, 255, 255), LightColor = Color3.fromRGB(255, 255, 255), ZIndex = 6, Parent = canvas })
+	local glowWm = Create("WorldModel", { Parent = glowVp })
+	local glowCam = Create("Camera", { FieldOfView = 34, Parent = glowVp })
+	glowVp.CurrentCamera = glowCam
+	local vp = Create("ViewportFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Ambient = Color3.fromRGB(190, 190, 200), LightColor = Color3.fromRGB(255, 255, 255), LightDirection = Vector3.new(-0.5, -1, -0.8), ZIndex = 7, Parent = canvas })
 	local wm = Create("WorldModel", { Parent = vp })
 	local cam = Create("Camera", { FieldOfView = 34, Parent = vp })
 	vp.CurrentCamera = cam
@@ -1812,18 +1816,27 @@ function GroupboxMethods:AddESPPreview(cfg)
 		glowParts = {}
 		for _, d in ipairs(m:GetDescendants()) do
 			if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" and d.Transparency < 1 then
-				local shell = Instance.new("Part")
-				shell.Name = "_glow"
-				shell.Anchored = true
-				shell.CanCollide = false
-				shell.CastShadow = false
-				shell.Material = Enum.Material.Neon
-				shell.Color = glowColour
-				shell.Transparency = 0.25
-				shell.Size = d.Size * 1.1 + Vector3.new(0.06, 0.06, 0.06)
-				shell.Shape = (d:IsA("Part") and d.Shape) or Enum.PartType.Block
-				shell.Parent = wm
-				glowParts[#glowParts + 1] = { part = shell, src = d }
+				for _, spec in ipairs({ { 1.06, 0.12, 0.0 }, { 1.16, 0.3, 0.72 } }) do
+					local shell
+					if d:IsA("MeshPart") then
+						shell = d:Clone()
+						for _, c in ipairs(shell:GetChildren()) do c:Destroy() end
+						shell.TextureID = ""
+					else
+						shell = Instance.new("Part")
+						shell.Shape = (d:IsA("Part") and d.Shape) or Enum.PartType.Block
+					end
+					shell.Name = "_glow"
+					shell.Anchored = true
+					shell.CanCollide = false
+					shell.CastShadow = false
+					shell.Material = Enum.Material.Neon
+					shell.Color = glowColour
+					shell.Transparency = spec[3]
+					shell.Size = d.Size * spec[1] + Vector3.new(spec[2], spec[2], spec[2])
+					shell.Parent = glowWm
+					glowParts[#glowParts + 1] = { part = shell, src = d, base = spec[3] }
+				end
 			end
 		end
 	end
@@ -1859,12 +1872,16 @@ function GroupboxMethods:AddESPPreview(cfg)
 
 	-- drag to rotate, wheel / buttons to zoom
 	local dragging, lastX = false, 0
-	canvas.Active = true
-	canvas.InputBegan:Connect(function(inp)
+	local sink = Create("ScrollingFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, ScrollingEnabled = true, ElasticBehavior = Enum.ElasticBehavior.Never, CanvasSize = UDim2.new(0, 0, 3, 0), CanvasPosition = Vector2.new(0, 1), Active = true, ZIndex = 8, Parent = canvas })
+	sink.InputBegan:Connect(function(inp)
 		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then dragging = true lastX = inp.Position.X end
 	end)
-	canvas.InputChanged:Connect(function(inp)
+	sink.InputChanged:Connect(function(inp)
 		if inp.UserInputType == Enum.UserInputType.MouseWheel then dist = math.clamp(dist - inp.Position.Z * 1.0, 4, 16) end
+	end)
+	sink:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+		local mid = math.max(0, (sink.AbsoluteCanvasSize.Y - sink.AbsoluteSize.Y) * 0.5)
+		if math.abs(sink.CanvasPosition.Y - mid) > 0.5 then sink.CanvasPosition = Vector2.new(0, mid) end
 	end)
 	Library:GiveSignal(UserInputService.InputChanged:Connect(function(inp)
 		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
@@ -1897,11 +1914,11 @@ function GroupboxMethods:AddESPPreview(cfg)
 		return Vector2.new((px * 0.5 + 0.5) * sz.X, (0.5 - py * 0.5) * sz.Y)
 	end
 	local function applyGlow()
-		for _, g in ipairs(glowParts) do g.part.Transparency = glowOn and 0.25 or 1 g.part.Color = glowColour end
+		for _, g in ipairs(glowParts) do g.part.Transparency = glowOn and g.base or 1 g.part.Color = glowColour end
 	end
 
 	for i, name in ipairs(tabsCfg) do
-		local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 8, Parent = canvas })
+		local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 9, Parent = canvas })
 		-- the veil card, verbatim: Code font, hard black stroke, name / "[dist] hp/max" / 60x3 bar, stacked above the head
 		local card = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(160, 36), BackgroundTransparency = 1, ZIndex = 9, Parent = page })
 		local nameL = Create("TextLabel", { Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, Font = Enum.Font.Code, TextSize = 13, TextColor3 = Color3.fromRGB(255, 255, 255), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, Text = "player", ZIndex = 10, Parent = card })
@@ -1994,6 +2011,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 			local ok, boxCf = pcall(function() return dummy:GetBoundingBox() end)
 			local pivot = ok and boxCf.Position or Vector3.zero
 			cam.CFrame = CFrame.new(pivot + Vector3.new(math.sin(yaw) * dist, dist * 0.1, math.cos(yaw) * dist), pivot)
+			glowCam.CFrame = cam.CFrame
 			for _, g in ipairs(glowParts) do if g.src.Parent then g.part.CFrame = g.src.CFrame end end
 		end
 		for _, t in ipairs(preview.Tabs) do if t.Page.Visible then t:_layout() end end
