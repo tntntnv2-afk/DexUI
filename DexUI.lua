@@ -523,12 +523,12 @@ end
 function Library:CreateWindow(cfg)
 	cfg = cfg or {}
 	local window = { Tabs = {}, ActiveTab = nil }
-	local size = cfg.Size or UDim2.fromOffset(820, 580)
+	local size = cfg.Size or UDim2.fromOffset(720, 500)
 	if Library.IsMobile then
 		local vp = ScreenGui.AbsoluteSize
 		size = UDim2.fromOffset(math.min(size.X.Offset, vp.X - 16), math.min(size.Y.Offset, vp.Y - 16))
 	end
-	local RAIL = 92
+	local RAIL = 132
 
 	local main = Create("Frame", { Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Size = size, Position = UDim2.new(0.5, 0, 0.5, 0), ClipsDescendants = true, ZIndex = 10, Parent = ScreenGui })
 	self:AddToRegistry(main, { BackgroundColor3 = "Background" })
@@ -565,28 +565,27 @@ function Library:CreateWindow(cfg)
 	-- vertical brand watermark down the left edge
 	local spaced = {}
 	for c in string.gmatch(string.upper(cfg.Title or "dexori"), ".") do spaced[#spaced + 1] = c end
-	local brand = Create("TextLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(260, 14), Position = UDim2.new(0, 13, 0.5, 20), Rotation = -90, BackgroundTransparency = 1, Text = table.concat(spaced, "   "), TextSize = 10, FontFace = Library.FontFaceBold, TextTransparency = 0.82, ZIndex = 12, Parent = rail })
-	self:AddToRegistry(brand, { TextColor3 = "Accent" })
+
 	-- logo plate with a soft red halo
-	local plate = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(46, 46), Position = UDim2.new(0.5, 6, 0, 16), ZIndex = 12, Parent = rail })
-	self:AddToRegistry(plate, { BackgroundColor3 = "Element" }); Corner(plate, 14)
+	local plate = Create("Frame", { Size = UDim2.fromOffset(36, 36), Position = UDim2.new(0, 18, 0, 16), BackgroundColor3 = Color3.new(0, 0, 0), ZIndex = 12, Parent = rail })
+	Corner(plate, 11)
 	local halo = Create("UIStroke", { Thickness = 1, Transparency = 0.55, Parent = plate })
 	self:AddToRegistry(halo, { Color = "Accent" })
 	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 0.9) }), Parent = halo })
-	Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(26, 26), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1, Image = cfg.Icon and ("rbxassetid://" .. tostring(cfg.Icon)) or Library.Icon, ZIndex = 13, Parent = plate })
+	Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(22, 22), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1, Image = cfg.Icon and ("rbxassetid://" .. tostring(cfg.Icon)) or Library.Icon, ZIndex = 13, Parent = plate })
+	local brandName = Text(rail, string.lower(cfg.Title or "dexori"), 13, true); brandName.Position = UDim2.new(0, 62, 0, 18); brandName.Size = UDim2.new(1, -70, 0, 16); brandName.ZIndex = 13
+	local brandSub = Text(rail, cfg.Subtitle or "", 10, false, "FontDim"); brandSub.Position = UDim2.new(0, 62, 0, 34); brandSub.Size = UDim2.new(1, -70, 0, 12); brandSub.ZIndex = 13
 
-	local railList = Create("Frame", { Size = UDim2.new(1, 0, 1, -170), Position = UDim2.new(0, 0, 0, 78), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
-	Create("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Center, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = railList })
-	Create("UIPadding", { PaddingLeft = UDim.new(0, 12), Parent = railList })
-	-- sliding selection fill behind the active tab
-	local selFill = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(64, 54), Position = UDim2.new(0.5, 6, 0, 78), Visible = false, ZIndex = 12, Parent = rail })
-	self:AddToRegistry(selFill, { BackgroundColor3 = "Element" }); Corner(selFill, 12)
-	local selEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.7, Parent = selFill })
+	local railList = Create("Frame", { Size = UDim2.new(1, -24, 1, -130), Position = UDim2.new(0, 12, 0, 70), BackgroundTransparency = 1, ZIndex = 12, Parent = rail })
+	Create("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = railList })
+	local selFill = Create("Frame", { Size = UDim2.new(1, -24, 0, 32), Position = UDim2.new(0, 12, 0, 70), Visible = false, ZIndex = 12, Parent = rail })
+	self:AddToRegistry(selFill, { BackgroundColor3 = "Element" }); Corner(selFill, 9)
+	local selEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.75, Parent = selFill })
 	self:AddToRegistry(selEdge, { Color = "Accent" })
-	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) }), Parent = selEdge })
+	Create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(0.6, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = selEdge })
 
 	-- rebindable menu key chip
-	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(54, 24), Position = UDim2.new(0.5, 6, 1, -14), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
+	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -24, 0, 26), Position = UDim2.new(0, 12, 1, -14), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
 	Corner(hintBtn, 8); self:AddToRegistry(hintBtn, { BackgroundColor3 = "Element" }); Stroke(hintBtn, "Outline")
 	local hint = Text(hintBtn, "", 10, true, "FontDim"); hint.TextXAlignment = Enum.TextXAlignment.Center; hint.Size = UDim2.new(1, 0, 1, 0); hint.ZIndex = 31
 	local rebinding = false
@@ -595,30 +594,29 @@ function Library:CreateWindow(cfg)
 		return (n:gsub("^Right", "R"):gsub("^Left", "L"):gsub("Control", "Ctrl"):gsub("Shift", "Shft"))
 	end
 	Library.ToggleKeybind = cfg.ToggleKeybind or Library.ToggleKeybind
-	hint.Text = keyShort(Library.ToggleKeybind)
-	hintBtn.MouseButton1Click:Connect(function() rebinding = true hint.Text = "..." hint.TextColor3 = Library.Theme.Accent end)
+	hint.Text = "menu  " .. keyShort(Library.ToggleKeybind)
+	hintBtn.MouseButton1Click:Connect(function() rebinding = true hint.Text = "press a key" hint.TextColor3 = Library.Theme.Accent end)
 	self:GiveSignal(UserInputService.InputBegan:Connect(function(inp)
 		if rebinding and inp.UserInputType == Enum.UserInputType.Keyboard then
 			rebinding = false
 			if inp.KeyCode ~= Enum.KeyCode.Escape then Library.ToggleKeybind = inp.KeyCode end
-			hint.Text = keyShort(Library.ToggleKeybind)
+			hint.Text = "menu  " .. keyShort(Library.ToggleKeybind)
 			hint.TextColor3 = Library.Theme.FontDim
 		end
 	end))
 
 	-- ------------------------------------------------------------ header
-	local head = Create("Frame", { Size = UDim2.new(1, -RAIL, 0, 78), Position = UDim2.new(0, RAIL, 0, 0), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
-	local pageTitle = Text(head, "", 24, true); pageTitle.Position = UDim2.new(0, 28, 0, 18); pageTitle.Size = UDim2.new(0.5, 0, 0, 28); pageTitle.ZIndex = 13
-	local pageSub = Text(head, cfg.Subtitle or "", 11, false, "FontDim"); pageSub.Position = UDim2.new(0, 29, 0, 48); pageSub.Size = UDim2.new(0.5, 0, 0, 14); pageSub.ZIndex = 13
+	local head = Create("Frame", { Size = UDim2.new(1, -RAIL, 0, 60), Position = UDim2.new(0, RAIL, 0, 0), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
+	local pageTitle = Text(head, "", 17, true); pageTitle.Position = UDim2.new(0, 22, 0, 20); pageTitle.Size = UDim2.new(0.5, 0, 0, 22); pageTitle.ZIndex = 13
 	Draggable(head, main)
 	-- scanning light streak under the header
-	local streak = Create("Frame", { Size = UDim2.new(1, -56, 0, 1), Position = UDim2.new(0, 28, 0, 77), BorderSizePixel = 0, ZIndex = 13, Parent = head })
+	local streak = Create("Frame", { Size = UDim2.new(1, -44, 0, 1), Position = UDim2.new(0, 22, 0, 59), BorderSizePixel = 0, ZIndex = 13, Parent = head })
 	self:AddToRegistry(streak, { BackgroundColor3 = "Accent" })
 	local sg = Create("UIGradient", { Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.45, 1),
 		NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(0.55, 1),
 		NumberSequenceKeypoint.new(1, 1) }), Parent = streak })
-	local baseLine = Create("Frame", { Size = UDim2.new(1, -56, 0, 1), Position = UDim2.new(0, 28, 0, 77), BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 12, Parent = head })
+	local baseLine = Create("Frame", { Size = UDim2.new(1, -44, 0, 1), Position = UDim2.new(0, 22, 0, 59), BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 12, Parent = head })
 	self:AddToRegistry(baseLine, { BackgroundColor3 = "Outline" })
 	task.spawn(function()
 		local t = -1.2
@@ -631,7 +629,7 @@ function Library:CreateWindow(cfg)
 	end)
 
 	-- close
-	local closeBtn = Create("TextButton", { Size = UDim2.fromOffset(28, 28), Position = UDim2.new(1, -44, 0, 18), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 14, Parent = head })
+	local closeBtn = Create("TextButton", { Size = UDim2.fromOffset(26, 26), Position = UDim2.new(1, -38, 0, 17), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 14, Parent = head })
 	Corner(closeBtn, 9)
 	do
 		local a = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(12, 1.5), Position = UDim2.new(0.5, 0, 0.5, 0), Rotation = 45, BorderSizePixel = 0, ZIndex = 15, Parent = closeBtn })
@@ -643,7 +641,7 @@ function Library:CreateWindow(cfg)
 	closeBtn.MouseButton1Click:Connect(function() Library:Confirm("unload " .. (cfg.Title or "the menu") .. "?", "this closes the menu for this session. you'll need to run the script again.", function() Library:Unload() end) end)
 
 	-- search
-	local searchBox = Create("Frame", { Size = UDim2.new(0, 220, 0, 32), Position = UDim2.new(1, -278, 0, 16), BackgroundTransparency = 1, ZIndex = 13, Parent = head })
+	local searchBox = Create("Frame", { Size = UDim2.new(0, 190, 0, 28), Position = UDim2.new(1, -240, 0, 16), BackgroundTransparency = 1, ZIndex = 13, Parent = head })
 	Corner(searchBox, 10)
 	local searchEdge = Stroke(searchBox, "Outline")
 	local sIcon = SearchIcon(searchBox, 13, "FontDim"); sIcon.Position = UDim2.new(0, 11, 0.5, -7); sIcon.ZIndex = 14
@@ -687,22 +685,22 @@ function Library:CreateWindow(cfg)
 	end)
 
 	-- ------------------------------------------------------------ body + footer
-	local body = Create("Frame", { Size = UDim2.new(1, -RAIL, 1, -112), Position = UDim2.new(0, RAIL, 0, 78), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
+	local body = Create("Frame", { Size = UDim2.new(1, -RAIL, 1, -90), Position = UDim2.new(0, RAIL, 0, 60), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
 	local fade = Create("Frame", { Size = UDim2.new(1, 0, 0, 28), Position = UDim2.new(0, 0, 1, -28), BorderSizePixel = 0, ZIndex = 20, Parent = body })
 	self:AddToRegistry(fade, { BackgroundColor3 = "Background" })
 	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0.1) }), Parent = fade })
 
-	local footer = Create("Frame", { Size = UDim2.new(1, -RAIL, 0, 34), Position = UDim2.new(0, RAIL, 1, -34), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
-	local footL = Text(footer, cfg.Footer or "", 10, false, "FontDim"); footL.Position = UDim2.new(0, 28, 0, 0); footL.Size = UDim2.new(0.5, 0, 1, 0); footL.ZIndex = 13
+	local footer = Create("Frame", { Size = UDim2.new(1, -RAIL, 0, 30), Position = UDim2.new(0, RAIL, 1, -30), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
+	local footL = Text(footer, cfg.Footer or "", 10, false, "FontDim"); footL.Position = UDim2.new(0, 22, 0, 0); footL.Size = UDim2.new(0.5, 0, 1, 0); footL.ZIndex = 13
 	-- live readout with a tiny fps sparkline
-	local spark = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(52, 12), Position = UDim2.new(1, -30, 0.5, 0), BackgroundTransparency = 1, ZIndex = 13, Parent = footer })
+	local spark = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(52, 12), Position = UDim2.new(1, -24, 0.5, 0), BackgroundTransparency = 1, ZIndex = 13, Parent = footer })
 	local bars = {}
 	for i = 1, 13 do
 		local b = Create("Frame", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.fromOffset(2, 2), Position = UDim2.new(0, (i - 1) * 4, 1, 0), BorderSizePixel = 0, ZIndex = 14, Parent = spark })
 		Corner(b, 1); self:AddToRegistry(b, { BackgroundColor3 = "Accent" })
 		bars[i] = b
 	end
-	local footR = Text(footer, "", 10, false, "FontDim"); footR.TextXAlignment = Enum.TextXAlignment.Right; footR.Position = UDim2.new(1, -300, 0, 0); footR.Size = UDim2.new(0, 210, 1, 0); footR.ZIndex = 13
+	local footR = Text(footer, "", 10, false, "FontDim"); footR.TextXAlignment = Enum.TextXAlignment.Right; footR.Position = UDim2.new(1, -294, 0, 0); footR.Size = UDim2.new(0, 210, 1, 0); footR.ZIndex = 13
 	task.spawn(function()
 		local frames, acc, fps = 0, 0, 0
 		local hist = {}
@@ -759,35 +757,38 @@ function Library:CreateWindow(cfg)
 	-- ------------------------------------------------------------ tabs
 	local order = 0
 	local function columns(parent, top)
+		local scroller = Create("ScrollingFrame", { Name = "Scroll", Size = UDim2.new(1, 0, 1, -top), Position = UDim2.new(0, 0, 0, top), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageTransparency = 0.75, ScrollingDirection = Enum.ScrollingDirection.Y, ScrollingEnabled = true, Active = true, ClipsDescendants = true, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ZIndex = 12, Parent = parent })
+		Library:AddToRegistry(scroller, { ScrollBarImageColor3 = "FontDim" })
+		Pad(scroller, 22, 22, 0, 20)
 		local function col(xs, xo)
-			local c = Create("ScrollingFrame", { Size = UDim2.new(0.5, -34, 1, -top), Position = UDim2.new(xs, xo, 0, top), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageTransparency = 0.7, ScrollingDirection = Enum.ScrollingDirection.Y, ScrollingEnabled = true, Active = true, ClipsDescendants = true, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ZIndex = 12, Parent = parent })
-			Library:AddToRegistry(c, { ScrollBarImageColor3 = "FontDim" })
-			Create("UIListLayout", { Padding = UDim.new(0, 14), SortOrder = Enum.SortOrder.LayoutOrder, Parent = c })
-			Pad(c, 0, 6, 0, 18)
+			local c = Create("Frame", { Size = UDim2.new(0.5, xo, 0, 0), Position = UDim2.new(xs, xs > 0 and 5 or 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, ZIndex = 12, Parent = scroller })
+			Create("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder, Parent = c })
 			return c
 		end
-		return col(0, 28), col(0.5, 6)
+		local l, r = col(0, -5), col(0.5, -5)
+		l._scroller = nil
+		return l, r, scroller
 	end
 
 	function window:AddTab(name, icon)
 		order = order + 1
 		local tab = { Name = name, Subtabs = {} }
-		local slot = Create("Frame", { Size = UDim2.fromOffset(64, 54), BackgroundTransparency = 1, LayoutOrder = order, ZIndex = 13, Parent = railList })
+		local slot = Create("Frame", { Size = UDim2.new(1, 0, 0, 32), BackgroundTransparency = 1, LayoutOrder = order, ZIndex = 13, Parent = railList })
 		local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 14, Parent = slot })
-		Corner(btn, 12)
+		Corner(btn, 9)
 		local glyph
 		if type(icon) == "number" or (type(icon) == "string" and string.sub(icon, 1, 3) == "rbx") then
-			glyph = Create("ImageLabel", { AnchorPoint = Vector2.new(0.5, 0), Size = UDim2.fromOffset(18, 18), Position = UDim2.new(0.5, 0, 0, 9), BackgroundTransparency = 1, Image = (type(icon) == "number") and ("rbxassetid://" .. icon) or tostring(icon), ZIndex = 15, Parent = btn })
+			glyph = Create("ImageLabel", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(16, 16), Position = UDim2.new(0, 10, 0.5, 0), BackgroundTransparency = 1, Image = (type(icon) == "number") and ("rbxassetid://" .. icon) or tostring(icon), ZIndex = 15, Parent = btn })
 			Library:AddToRegistry(glyph, { ImageColor3 = "FontDim" })
 		else
-			glyph = Icon(btn, icon or "grid", 18, "FontDim")
-			glyph.AnchorPoint = Vector2.new(0.5, 0)
-			glyph.Position = UDim2.new(0.5, 0, 0, 9)
+			glyph = Icon(btn, icon or "grid", 16, "FontDim")
+			glyph.AnchorPoint = Vector2.new(0, 0.5)
+			glyph.Position = UDim2.new(0, 10, 0.5, 0)
 			glyph.ZIndex = 15
 		end
-		local lbl = Text(btn, string.lower(name), 10, true, "FontDim")
-		lbl.TextXAlignment = Enum.TextXAlignment.Center; lbl.Position = UDim2.new(0, 0, 1, -19); lbl.Size = UDim2.new(1, 0, 0, 14); lbl.ZIndex = 15
-		Press(btn, 0.94)
+		local lbl = Text(btn, name, 12, true, "FontDim")
+		lbl.AnchorPoint = Vector2.new(0, 0.5); lbl.Position = UDim2.new(0, 34, 0.5, 0); lbl.Size = UDim2.new(1, -40, 0, 16); lbl.ZIndex = 15
+		Press(btn, 0.97)
 		btn.MouseEnter:Connect(function() if window.ActiveTab ~= tab then Tween(lbl, { TextColor3 = Library.Theme.Font }, 0.1) end end)
 		btn.MouseLeave:Connect(function() if window.ActiveTab ~= tab then Tween(lbl, { TextColor3 = Library.Theme.FontDim }, 0.1) end end)
 		tab._btn, tab._glyph, tab._label, tab._slot = btn, glyph, lbl, slot
@@ -796,16 +797,16 @@ function Library:CreateWindow(cfg)
 		tab.Page = page
 		local subRow = Create("Frame", { Size = UDim2.new(1, -56, 0, 30), Position = UDim2.new(0, 28, 0, 8), BackgroundTransparency = 1, Visible = false, ZIndex = 12, Parent = page })
 		Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder, Parent = subRow })
-		local l, r = columns(page, 14)
-		tab.Left, tab.Right, tab._cols = l, r, { l, r }
+		local l, r, scroller = columns(page, 12)
+		tab.Left, tab.Right, tab._cols, tab._scroller = l, r, { l, r }, scroller
 
 		local function relayout()
-			local top = subRow.Visible and 48 or 14
-			local all = { l, r }
-			for _, st in ipairs(tab.Subtabs) do all[#all + 1] = st.Left all[#all + 1] = st.Right end
-			for _, c in ipairs(all) do
-				c.Position = UDim2.new(c.Position.X.Scale, c.Position.X.Offset, 0, top)
-				c.Size = UDim2.new(c.Size.X.Scale, c.Size.X.Offset, 1, -top)
+			local top = subRow.Visible and 46 or 12
+			local all = { scroller }
+			for _, st in ipairs(tab.Subtabs) do all[#all + 1] = st._scroller end
+			for _, s in ipairs(all) do
+				s.Position = UDim2.new(0, 0, 0, top)
+				s.Size = UDim2.new(1, 0, 1, -top)
 			end
 		end
 
@@ -822,8 +823,8 @@ function Library:CreateWindow(cfg)
 			window.ActiveTab = self
 			task.defer(function()
 				local y = self._slot.AbsolutePosition.Y - rail.AbsolutePosition.Y
-				if not selFill.Visible then selFill.Visible = true selFill.Position = UDim2.new(0.5, 6, 0, y) end
-				Tween(selFill, { Position = UDim2.new(0.5, 6, 0, y) }, 0.22, Enum.EasingStyle.Quint)
+				if not selFill.Visible then selFill.Visible = true selFill.Position = UDim2.new(0, 12, 0, y) end
+				Tween(selFill, { Position = UDim2.new(0, 12, 0, y) }, 0.22, Enum.EasingStyle.Quint)
 			end)
 			local i = 0
 			for _, c in ipairs(self._cols) do
@@ -850,10 +851,10 @@ function Library:CreateWindow(cfg)
 			Corner(sb, 9); Pad(sb, 14, 14, 0, 0); Library:AddToRegistry(sb, { BackgroundColor3 = "Element" })
 			local sl = Text(sb, subName, 11, true, "FontDim"); sl.AutomaticSize = Enum.AutomaticSize.X; sl.Size = UDim2.new(0, 0, 1, 0); sl.ZIndex = 14
 			local sub = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 11, Parent = page })
-			local sl2, sr2 = columns(sub, 48)
-			st.Page, st.Left, st.Right, st._btn, st._label = sub, sl2, sr2, sb, sl
+			local sl2, sr2, sc2 = columns(sub, 46)
+			st.Page, st.Left, st.Right, st._scroller, st._btn, st._label = sub, sl2, sr2, sc2, sb, sl
 			function st:Select()
-				for _, c in ipairs(tab._cols) do c.Visible = false end
+				tab._scroller.Visible = false
 				for _, o in ipairs(tab.Subtabs) do
 					o.Page.Visible = false
 					o._btn.BackgroundTransparency = 1
@@ -886,19 +887,19 @@ function Library:CreateWindow(cfg)
 		gbOrder = gbOrder + 1
 		local gb = { Name = name, Path = path .. " / " .. name }
 		local card = Create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, LayoutOrder = gbOrder, ZIndex = 12, Parent = column })
-		Library:AddToRegistry(card, { BackgroundColor3 = "Main" }); Corner(card, 16)
+		Library:AddToRegistry(card, { BackgroundColor3 = "Main" }); Corner(card, 14)
 		local cs = Create("UIStroke", { Thickness = 1, Transparency = 0.15, Parent = card })
 		Library:AddToRegistry(cs, { Color = "Outline" })
 		-- light-catching top edge
 		local lightEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.86, Color = Color3.fromRGB(255, 255, 255), Parent = card })
 		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.25, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = lightEdge })
-		local head2 = Create("Frame", { Size = UDim2.new(1, 0, 0, 42), BackgroundTransparency = 1, ZIndex = 13, Parent = card })
-		local t = Text(head2, name, 12, true); t.Position = UDim2.new(0, 18, 0, 0); t.Size = UDim2.new(1, -36, 1, 0); t.ZIndex = 14
-		local rule = Create("Frame", { Size = UDim2.new(1, -36, 0, 1), Position = UDim2.new(0, 18, 0, 41), BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 13, Parent = card })
+		local head2 = Create("Frame", { Size = UDim2.new(1, 0, 0, 36), BackgroundTransparency = 1, ZIndex = 13, Parent = card })
+		local t = Text(head2, name, 12, true); t.Position = UDim2.new(0, 14, 0, 0); t.Size = UDim2.new(1, -28, 1, 0); t.ZIndex = 14
+		local rule = Create("Frame", { Size = UDim2.new(1, -28, 0, 1), Position = UDim2.new(0, 14, 0, 35), BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 13, Parent = card })
 		Library:AddToRegistry(rule, { BackgroundColor3 = "Outline" })
-		local holder = Create("Frame", { Size = UDim2.new(1, -36, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.new(0, 18, 0, 44), BackgroundTransparency = 1, ZIndex = 13, Parent = card })
-		Pad(holder, 0, 0, 0, 16)
-		Create("UIListLayout", { Padding = UDim.new(0, 9), SortOrder = Enum.SortOrder.LayoutOrder, Parent = holder })
+		local holder = Create("Frame", { Size = UDim2.new(1, -28, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, Position = UDim2.new(0, 14, 0, 38), BackgroundTransparency = 1, ZIndex = 13, Parent = card })
+		Pad(holder, 0, 0, 0, 12)
+		Create("UIListLayout", { Padding = UDim.new(0, 7), SortOrder = Enum.SortOrder.LayoutOrder, Parent = holder })
 		gb.Frame, gb.Holder, gb._order = card, holder, 0
 		function gb:_next() self._order = self._order + 1 return self._order end
 		function gb:_focus(el)
@@ -1145,11 +1146,12 @@ end
 
 function GroupboxMethods:AddInput(idx, cfg)
 	cfg = cfg or {}
-	local f = row(self, LINE_H + CTRL_H + 4)
-	local l = lineLabel(f, cfg.Text or idx, true)
-	local boxF = Create("Frame", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, CTRL_H), Position = UDim2.new(0, 0, 1, 0), ZIndex = 5, Parent = f })
+	local f = row(self, 40)
+	local boxF = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), ZIndex = 5, Parent = f })
 	Library:AddToRegistry(boxF, { BackgroundColor3 = "Element" }); Corner(boxF, 10); local st = Stroke(boxF, "Outline")
-	local tb = Create("TextBox", { Size = UDim2.new(1, -20, 1, 0), Position = UDim2.new(0, 10, 0, 0), BackgroundTransparency = 1, Text = cfg.Default or "", PlaceholderText = cfg.Placeholder or "", TextSize = 12, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 6, Parent = boxF })
+	local l = Text(boxF, cfg.Text or idx, 9, true, "FontDim")
+	l.Position = UDim2.new(0, 11, 0, 6); l.Size = UDim2.new(1, -22, 0, 11); l.ZIndex = 6
+	local tb = Create("TextBox", { Size = UDim2.new(1, -22, 0, 16), Position = UDim2.new(0, 11, 0, 18), BackgroundTransparency = 1, Text = cfg.Default or "", PlaceholderText = cfg.Placeholder or "", TextSize = 12, FontFace = Library.FontFace, TextXAlignment = Enum.TextXAlignment.Left, ClearTextOnFocus = false, ZIndex = 6, Parent = boxF })
 	Library:AddToRegistry(tb, { TextColor3 = "Font", PlaceholderColor3 = "FontDim" })
 	local obj = { Frame = f, Value = cfg.Default or "", Type = "Input", Idx = idx, Callback = cfg.Callback, _changed = {} }
 	local function fire()
@@ -1170,12 +1172,13 @@ end
 
 function GroupboxMethods:AddDropdown(idx, cfg)
 	cfg = cfg or {}
-	local f = row(self, LINE_H + CTRL_H + 4)
-	local l = lineLabel(f, cfg.Text or idx, true)
-	local btn = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, 0, 0, CTRL_H), Position = UDim2.new(0, 0, 1, 0), Text = "", AutoButtonColor = false, ZIndex = 5, Parent = f })
-	Library:AddToRegistry(btn, { BackgroundColor3 = "Element" }); Corner(btn, 10); Stroke(btn, "Outline"); Hover(btn, "Element", "ElementHover")
+	local f = row(self, 40)
+	local btn = Create("TextButton", { Size = UDim2.new(1, 0, 1, 0), Text = "", AutoButtonColor = false, ZIndex = 5, Parent = f })
+	Library:AddToRegistry(btn, { BackgroundColor3 = "Element" }); Corner(btn, 10); local bstroke = Stroke(btn, "Outline"); Hover(btn, "Element", "ElementHover")
+	local l = Text(btn, cfg.Text or idx, 9, true, "FontDim")
+	l.Position = UDim2.new(0, 11, 0, 6); l.Size = UDim2.new(1, -40, 0, 11); l.ZIndex = 6
 	local cur = Text(btn, "", 12, false)
-	cur.AnchorPoint = Vector2.new(0, 0.5); cur.Position = UDim2.new(0, 10, 0.5, 0); cur.Size = UDim2.new(1, -36, 0, LINE_H); cur.ZIndex = 6
+	cur.Position = UDim2.new(0, 11, 0, 18); cur.Size = UDim2.new(1, -40, 0, 16); cur.ZIndex = 6
 	local arrow = Chevron(btn, 12, "FontDim"); arrow.AnchorPoint = Vector2.new(0.5, 0.5); arrow.Position = UDim2.new(1, -16, 0.5, 0); arrow.ZIndex = 6
 
 	local list, listBody = PopupShell(220, 60, 12, 6)
@@ -1193,7 +1196,7 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	Library:AddToRegistry(scroll, { ScrollBarImageColor3 = "FontDim" })
 	Create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
 	local function sizeScroll(n)
-		local h = math.clamp(n * 31 - 3, 0, 210)
+		local h = math.clamp(n * 29 - 3, 0, 200)
 		scroll.Size = UDim2.new(1, 0, 0, h)
 		list.Size = UDim2.new(0, list.Size.X.Offset, 0, h + 12 + (cfg.Searchable and 31 or 0))
 	end
@@ -1232,16 +1235,15 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 			if q == "" or string.find(string.lower(tostring(v)), q, 1, true) then
 				shown = shown + 1
 				local selected = obj.Multi and obj.Value[v] or (not obj.Multi and obj.Value == v)
-				local ib = Create("TextButton", { Size = UDim2.new(1, 0, 0, 28), Text = "", AutoButtonColor = false, BackgroundTransparency = selected and 0 or 1, LayoutOrder = i, ZIndex = 62, Parent = scroll })
+				local ib = Create("TextButton", { Size = UDim2.new(1, 0, 0, 26), Text = "", AutoButtonColor = false, BackgroundTransparency = selected and 0 or 1, LayoutOrder = i, ZIndex = 62, Parent = scroll })
 				Library:AddToRegistry(ib, { BackgroundColor3 = "Element" })
-				Corner(ib, 8)
-				local dot = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(14, 14), Position = UDim2.new(0, 8, 0.5, 0), BackgroundTransparency = selected and 0 or 1, ZIndex = 63, Parent = ib })
-				Corner(dot, obj.Multi and 4 or 7)
-				Library:AddToRegistry(dot, { BackgroundColor3 = "Accent" })
-				local dotEdge = Create("UIStroke", { Thickness = 1, Transparency = selected and 1 or 0.35, Parent = dot })
-				Library:AddToRegistry(dotEdge, { Color = "Outline" })
+				Corner(ib, 7)
 				local il = Text(ib, tostring(v), 12, selected, selected and "Font" or "FontDim")
-				il.AnchorPoint = Vector2.new(0, 0.5); il.Position = UDim2.new(0, 30, 0.5, 0); il.Size = UDim2.new(1, -40, 0, LINE_H); il.ZIndex = 63
+				il.AnchorPoint = Vector2.new(0, 0.5); il.Position = UDim2.new(0, 10, 0.5, 0); il.Size = UDim2.new(1, -36, 0, LINE_H); il.ZIndex = 63
+				local tick = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(12, 12), Position = UDim2.new(1, -9, 0.5, 0), BackgroundTransparency = 1, Visible = selected, ZIndex = 63, Parent = ib })
+				local t1 = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(4, 1.6), Position = UDim2.new(0.5, -3, 0.5, 1), Rotation = 45, BorderSizePixel = 0, ZIndex = 64, Parent = tick })
+				local t2 = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(8, 1.6), Position = UDim2.new(0.5, 1, 0.5, -1), Rotation = -45, BorderSizePixel = 0, ZIndex = 64, Parent = tick })
+				Library:AddToRegistry(t1, { BackgroundColor3 = "Accent" }); Library:AddToRegistry(t2, { BackgroundColor3 = "Accent" })
 				ib.MouseEnter:Connect(function() if not selected then ib.BackgroundTransparency = 0.4 end end)
 				ib.MouseLeave:Connect(function() if not selected then ib.BackgroundTransparency = 1 end end)
 				ib.MouseButton1Click:Connect(function()
@@ -1260,7 +1262,8 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	end
 	if search then search:GetPropertyChangedSignal("Text"):Connect(build) end
 	btn.MouseButton1Click:Connect(function()
-		if list.Visible then list.Visible = false Tween(arrow, { Rotation = 0 }, 0.16) return end
+		if list.Visible then list.Visible = false Tween(arrow, { Rotation = 0 }, 0.16) bstroke.Color = Library.Theme.Outline return end
+		bstroke.Color = Library.Theme.Accent
 		Library:_ClosePopups(list)
 		list.Size = UDim2.new(0, btn.AbsoluteSize.X, 0, 0)
 		local y = btn.AbsolutePosition.Y + btn.AbsoluteSize.Y + 5
@@ -1273,6 +1276,7 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 		Tween(sc, { Scale = 1 }, 0.2, Enum.EasingStyle.Quint)
 		Tween(arrow, { Rotation = 180 }, 0.16)
 	end)
+	list:GetPropertyChangedSignal("Visible"):Connect(function() if not list.Visible then bstroke.Color = Library.Theme.Outline Tween(arrow, { Rotation = 0 }, 0.16) end end)
 	function obj:SetValues(vals)
 		self.Values = vals or {}
 		if self.Multi then
