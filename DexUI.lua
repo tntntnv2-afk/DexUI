@@ -2979,6 +2979,284 @@ function Cosmetics:Stop()
 	if self._folder then pcall(function() self._folder:Destroy() end) self._folder = nil end
 end
 
+Cosmetics.After = { On = false, Colour = Color3.fromRGB(255, 60, 60), Neon = true, Count = 3, Gap = 0.13, Life = 0.45, _hist = {}, _ghosts = {}, _conn = nil, _last = 0 }
+
+local function snapshotPose(ch)
+
+	local hrp = ch:FindFirstChild("HumanoidRootPart")
+	if not hrp then return nil end
+	local pose = { root = hrp.CFrame, parts = {} }
+	for _, d in ipairs(ch:GetChildren()) do
+		if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" and d.Transparency < 1 then
+			pose.parts[#pose.parts + 1] = { rel = hrp.CFrame:ToObjectSpace(d.CFrame), size = d.Size, part = d }
+		end
+	end
+	return pose
+end
+
+function Cosmetics.After:_makeGhost()
+	local ch = LocalPlayer.Character
+	if not ch then return nil end
+	local folder = Cosmetics:_folderRef()
+	local model = Instance.new("Model")
+	model.Name = "_afterghost"
+	local slots = {}
+	for _, d in ipairs(ch:GetChildren()) do
+		if d:IsA("BasePart") and d.Name ~= "HumanoidRootPart" and d.Transparency < 1 then
+			local clone
+			if d:IsA("MeshPart") then
+				clone = d:Clone()
+				for _, c in ipairs(clone:GetChildren()) do c:Destroy() end
+				clone.TextureID = ""
+			else
+				clone = d:Clone()
+				for _, c in ipairs(clone:GetChildren()) do
+					if not c:IsA("SpecialMesh") then c:Destroy() else c.TextureId = "" end
+				end
+			end
+			clone.Anchored = true
+			clone.CanCollide = false
+			clone.CanQuery = false
+			clone.CastShadow = false
+			clone.Massless = true
+			if self.Neon then clone.Material = Enum.Material.Neon end
+			clone.Color = self.Colour
+			clone.Parent = model
+			slots[#slots + 1] = { clone = clone, src = d }
+		end
+	end
+	model.Parent = folder
+	return { model = model, slots = slots }
+end
+
+function Cosmetics.After:_apply(ghost, pose, alpha)
+	local col = Cosmetics.Rainbow and Color3.fromHSV((os.clock() * 0.15) % 1, 0.85, 1) or self.Colour
+
+	for i, slot in ipairs(ghost.slots) do
+		local rec = pose.parts[i]
+		if rec then
+			slot.clone.CFrame = pose.root * rec.rel
+			slot.clone.Transparency = alpha
+			slot.clone.Color = col
+		else
+			slot.clone.Transparency = 1
+		end
+	end
+end
+
+function Cosmetics.After:Set(on)
+	self.On = on
+	if not on then
+		for _, g in ipairs(self._ghosts) do pcall(function() g.model:Destroy() end) end
+		self._ghosts = {}
+		self._hist = {}
+		if self._conn then self._conn:Disconnect() self._conn = nil end
+		return
+	end
+
+	self._ghosts = {}
+	for _ = 1, self.Count do
+		local g = self:_makeGhost()
+		if g then g.model:Destroy() end
+	end
+	self._conn = RunService.Heartbeat:Connect(function()
+		if not self.On then return end
+		local ch = LocalPlayer.Character
+		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
+		local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+		if not (ch and hrp) then return end
+
+		local moving = hrp.AssemblyLinearVelocity.Magnitude > 4
+		local now = os.clock()
+		if moving and now - self._last >= self.Gap then
+			self._last = now
+			local pose = snapshotPose(ch)
+			if pose then
+				local g = self:_makeGhost()
+				if g then
+					self:_apply(g, pose, 0.35)
+					table.insert(self._ghosts, { model = g.model, slots = g.slots, born = now })
+				end
+			end
+		end
+
+		for i = #self._ghosts, 1, -1 do
+			local gh = self._ghosts[i]
+			local t = (now - gh.born) / self.Life
+			if t >= 1 then
+				pcall(function() gh.model:Destroy() end)
+				table.remove(self._ghosts, i)
+			else
+				for _, slot in ipairs(gh.slots) do
+					if slot.clone.Parent then slot.clone.Transparency = 0.35 + 0.65 * t end
+				end
+			end
+		end
+	end)
+end
+
+Cosmetics.Dissolve = { Colour = Color3.fromRGB(255, 60, 60), _busy = false, Library = nil }
+
+-- shell of clones that copy the live pose; each clone fades smoothly and rises apart as it dissolves
+function Cosmetics.Dissolve:_buildShell()
+	local ch = LocalPlayer.Character
+	local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+	if not (ch and hrp) then return nil end
+	local model = Instance.new("Model")
+	model.Name = "_dissolve"
+	local slots = {}
+	local minY, maxY = math.huge, -math.huge
+	for _, d in ipairs(ch:GetDescendants()) do
+		if d:IsA("BasePart") and d.Transparency < 1 then
+			local clone
+			if d:IsA("MeshPart") then
+				clone = d:Clone()
+				for _, c in ipairs(clone:GetChildren()) do c:Destroy() end
+				clone.TextureID = ""
+			else
+				clone = d:Clone()
+				for _, c in ipairs(clone:GetChildren()) do
+					if not c:IsA("SpecialMesh") then c:Destroy() else c.TextureId = "" end
+				end
+			end
+			clone.Anchored = true clone.CanCollide = false clone.CanQuery = false clone.CastShadow = false clone.Massless = true
+			clone.Transparency = 1
+			clone.Parent = model
+			local relY = (hrp.CFrame:ToObjectSpace(d.CFrame)).Position.Y
+			minY = math.min(minY, relY)
+			maxY = math.max(maxY, relY)
+			slots[#slots + 1] = { clone = clone, src = d, relY = relY }
+		end
+	end
+	model.Parent = Cosmetics:_folderRef()
+	return { model = model, slots = slots, minY = minY - 1.2, maxY = maxY + 1.2 }
+end
+
+function Cosmetics.Dissolve:_burst(worldPos, colour, big)
+	local root = Instance.new("Part")
+	root.Name = "_dissolveFx" root.Anchored = true root.Transparency = 1 root.CanCollide = false root.CanQuery = false root.Size = Vector3.new(0.2, 0.2, 0.2)
+	root.CFrame = CFrame.new(worldPos) root.Parent = Cosmetics:_folderRef()
+	local a = Instance.new("Attachment") a.Parent = root
+
+	-- rising embers
+	local e = Instance.new("ParticleEmitter")
+	e.Texture = "rbxassetid://243660364"
+	e.Color = ColorSequence.new(colour)
+	e.LightEmission = 1
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, big and 1.0 or 0.7), NumberSequenceKeypoint.new(1, 0) })
+	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.1), NumberSequenceKeypoint.new(0.7, 0.3), NumberSequenceKeypoint.new(1, 1) })
+	e.Lifetime = NumberRange.new(0.5, 1.0)
+	e.Speed = NumberRange.new(4, 9)
+	e.SpreadAngle = Vector2.new(35, 35)
+	e.Acceleration = Vector3.new(0, 10, 0)
+	e.Drag = 2
+	e.Rotation = NumberRange.new(0, 360)
+	e.Parent = a
+
+	-- fast sparkles
+	local sp = Instance.new("ParticleEmitter")
+	sp.Texture = "rbxassetid://6015897843"
+	sp.Color = ColorSequence.new(colour, Color3.new(1, 1, 1))
+	sp.LightEmission = 1
+	sp.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 0) })
+	sp.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
+	sp.Lifetime = NumberRange.new(0.3, 0.6)
+	sp.Speed = NumberRange.new(6, 14)
+	sp.SpreadAngle = Vector2.new(180, 180)
+	sp.Acceleration = Vector3.new(0, -8, 0)
+	sp.Parent = a
+
+	return root, a, e, sp
+end
+
+-- a bright expanding ring on the floor + a light flash at the moment of teleport
+function Cosmetics.Dissolve:_shock(worldPos, colour)
+	local f = Cosmetics:_folderRef()
+	local ring = part({ Name = "_dissolveRing", Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.1, 1, 1), Material = Enum.Material.Neon, Color = colour, Transparency = 0.1, CFrame = CFrame.new(worldPos) * CFrame.Angles(0, 0, math.rad(90)), Parent = f })
+	local light = Instance.new("PointLight")
+	light.Color = colour light.Brightness = 8 light.Range = 18 light.Parent = ring
+	task.spawn(function()
+		local t0 = os.clock()
+		while os.clock() - t0 < 0.5 do
+			local t = (os.clock() - t0) / 0.5
+			local s = 2 + 10 * t
+			ring.Size = Vector3.new(0.1, s, s)
+			ring.Transparency = 0.1 + 0.9 * t
+			light.Brightness = 8 * (1 - t)
+			task.wait()
+		end
+		pcall(function() ring:Destroy() end)
+	end)
+end
+
+function Cosmetics.Dissolve:Play(dir, dur, onDone)
+	local ch = LocalPlayer.Character
+	local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+	if not (ch and hrp) then if onDone then onDone() end return end
+	dur = dur or 0.45
+	local colour = Cosmetics.Rainbow and Color3.fromHSV((os.clock() * 0.15) % 1, 0.85, 1) or self.Colour
+	local shell = self:_buildShell()
+	if not shell then if onDone then onDone() end return end
+	local fxRoot, att, embers, sparks = self:_burst(hrp.Position, colour, false)
+	for _, s in ipairs(shell.slots) do s.src.LocalTransparencyModifier = 1 end
+
+	local BAND = 1.6   -- height of the soft dissolve band, so parts fade rather than pop
+	task.spawn(function()
+		local t0 = os.clock()
+		local span = math.max(shell.maxY - shell.minY, 0.1)
+		embers.Rate = 90 sparks.Rate = 60
+		while os.clock() - t0 < dur do
+			local raw = (os.clock() - t0) / dur
+			local t = dir == "in" and (1 - raw) or raw
+			local cut = shell.minY + span * t
+			for _, s in ipairs(shell.slots) do
+				if s.src.Parent then
+					-- follow live pose; as the band passes a part, it lifts and fades
+					local above = s.relY - cut
+					local frac = math.clamp(above / BAND + 0.5, 0, 1)   -- 1 solid, 0 gone
+					local lift = (1 - frac) * 1.2
+					s.clone.CFrame = s.src.CFrame + Vector3.new(0, dir == "out" and lift or -lift * (1 - frac), 0)
+					s.clone.Transparency = 1 - frac
+					if frac < 0.98 then
+						s.clone.Material = Enum.Material.Neon
+						s.clone.Color = colour:Lerp(Color3.new(1, 1, 1), (1 - frac) * 0.4)
+					end
+				end
+			end
+			att.WorldCFrame = CFrame.new((hrp.CFrame * CFrame.new(0, cut, 0)).Position)
+			task.wait()
+		end
+		for _, s in ipairs(shell.slots) do s.clone.Transparency = (dir == "out") and 1 or 0 end
+		if dir == "in" then
+			for _, s in ipairs(shell.slots) do if s.src.Parent then s.src.LocalTransparencyModifier = 0 end end
+		end
+		embers.Rate = 0 sparks.Rate = 0
+		if onDone then onDone() end
+		task.wait(1.0)
+		pcall(function() shell.model:Destroy() end)
+		pcall(function() fxRoot:Destroy() end)
+	end)
+end
+
+function Cosmetics.Dissolve:Teleport(targetCFrame)
+	local ch = LocalPlayer.Character
+	local hrp = ch and ch:FindFirstChild("HumanoidRootPart")
+	if not (ch and hrp) or self._busy then return end
+	self._busy = true
+	local colour = Cosmetics.Rainbow and Color3.fromHSV((os.clock() * 0.15) % 1, 0.85, 1) or self.Colour
+	self:_shock(hrp.Position, colour)
+	self:Play("out", 0.38, function()
+		local hold = os.clock() + 0.18
+		task.spawn(function()
+			while os.clock() < hold do
+				pcall(function() hrp.CFrame = targetCFrame hrp.AssemblyLinearVelocity = Vector3.zero end)
+				RunService.RenderStepped:Wait()
+			end
+			self:_shock(targetCFrame.Position, colour)
+			self:Play("in", 0.38, function() self._busy = false end)
+		end)
+	end)
+end
 function Cosmetics:BuildTab(tab)
 	local Library = self.Library
 	local left = tab:AddLeftGroupbox("Cosmetics")
@@ -3008,12 +3286,511 @@ function Cosmetics:BuildTab(tab)
 	end })
 	right:AddLabel("everything here is client side. only you can see it.", true)
 
-	LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5) self:Rebuild() end)
-	Library:OnUnload(function() self:Stop() end)
+	local fx = tab:AddLeftGroupbox("Effects")
+	fx:AddToggle("Cosm_After", { Text = "afterimages (while moving)", Default = false, Callback = function(v) Cosmetics.After.Colour = self.After.Colour Cosmetics.After:Set(v) end })
+		:AddColorPicker("Cosm_After_Colour", { Default = Cosmetics.After.Colour, Title = "afterimage colour", Callback = function(c) Cosmetics.After.Colour = c end })
+	fx:AddSlider("Cosm_After_Gap", { Text = "spawn interval", Default = 0.13, Min = 0.05, Max = 0.4, Rounding = 2, Suffix = "s", Callback = function(v) Cosmetics.After.Gap = v end })
+	fx:AddSlider("Cosm_After_Life", { Text = "fade time", Default = 0.45, Min = 0.2, Max = 1.2, Rounding = 2, Suffix = "s", Callback = function(v) Cosmetics.After.Life = v end })
+	fx:AddToggle("Cosm_After_Neon", { Text = "neon glow", Default = true, Callback = function(v) Cosmetics.After.Neon = v end })
+
+	local dz = tab:AddRightGroupbox("Dissolve")
+	dz:AddColorPicker("Cosm_Diss_Colour", { Text = "dissolve colour", Default = Cosmetics.Dissolve.Colour, Callback = function(c) Cosmetics.Dissolve.Colour = c end })
+	dz:AddButton({ Text = "dissolve out & back", Func = function()
+		Cosmetics.Dissolve:Play("out", 0.35, function()
+			task.wait(0.15)
+			Cosmetics.Dissolve:Play("in", 0.35)
+		end)
+	end })
+	dz:AddLabel("in a script, call Cosmetics.Dissolve:Teleport(cframe) to warp with the shader on both ends.", true)
+
+	LocalPlayer.CharacterAdded:Connect(function()
+		task.wait(0.5)
+		self:Rebuild()
+		if Cosmetics.After.On then Cosmetics.After:Set(false) Cosmetics.After:Set(true) end
+	end)
+	Library:OnUnload(function() self:Stop() Cosmetics.After:Set(false) end)
 end
 
 return Cosmetics
 
 end)()
 
-return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager, Cosmetics = Cosmetics }
+local Intro = (function()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+
+local Intro = {
+	Flag = "DexoriHub/intro_seen.flag",
+	Assets = { CircleOuter = 137530322837065, CircleInner = 90176716791462, FloorGlow = 88776888306340 },
+	Sounds = { Thunder = 0, Whoosh = 0, Impact = 0, Rise = 0 },
+	Colour = Color3.fromRGB(214, 40, 48),
+	Title = "DEXORI",
+	Subtitle = "made by ryoichi the goat",
+}
+
+local function ease(t, kind)
+	t = math.clamp(t, 0, 1)
+	if kind == "in" then return t * t * t
+	elseif kind == "out" then return 1 - (1 - t) ^ 3
+	elseif kind == "inout" then return t < 0.5 and 4 * t * t * t or 1 - (-2 * t + 2) ^ 3 / 2
+	elseif kind == "back" then local c = 1.70158 return 1 + (c + 1) * (t - 1) ^ 3 + c * (t - 1) ^ 2
+	end
+	return t
+end
+local function lerp(a, b, t) return a + (b - a) * t end
+local function seen() local ok, r = pcall(function() return isfile and isfile(Intro.Flag) end) return ok and r end
+local function markSeen() pcall(function() if not isfolder("DexoriHub") then makefolder("DexoriHub") end writefile(Intro.Flag, tostring(os.time())) end) end
+local function assetId(n) n = tonumber(n) or 0 if n > 0 then return "rbxassetid://" .. n end return nil end
+local function playSound(id, vol, parent)
+	local a = assetId(id)
+	if not a then return end
+	pcall(function()
+		local s = Instance.new("Sound") s.SoundId = a s.Volume = vol or 1 s.Parent = parent or Workspace
+		s:Play() s.Ended:Connect(function() s:Destroy() end)
+	end)
+end
+
+local function part(props)
+	local p = Instance.new("Part")
+	p.Anchored = true p.CanCollide = false p.CanQuery = false p.CanTouch = false p.CastShadow = false
+	p.Material = Enum.Material.Neon p.TopSurface = Enum.SurfaceType.Smooth p.BottomSurface = Enum.SurfaceType.Smooth
+	for k, v in pairs(props) do p[k] = v end
+	return p
+end
+
+local Timeline = {}
+Timeline.__index = Timeline
+function Timeline.new()
+	return setmetatable({ events = {}, tracks = {}, t = 0, done = false, fired = {} }, Timeline)
+end
+function Timeline:at(t, fn) table.insert(self.events, { t = t, fn = fn }) return self end
+function Timeline:tween(t0, t1, fn, kind) table.insert(self.tracks, { t0 = t0, t1 = t1, fn = fn, kind = kind }) return self end
+function Timeline:step(dt)
+	self.t = self.t + dt
+	for i, e in ipairs(self.events) do
+		if not self.fired[i] and self.t >= e.t then self.fired[i] = true pcall(e.fn) end
+	end
+	for _, tr in ipairs(self.tracks) do
+		if self.t >= tr.t0 and (self.t <= tr.t1 or not tr.ended) then
+			local a = math.clamp((self.t - tr.t0) / math.max(tr.t1 - tr.t0, 1e-3), 0, 1)
+			pcall(tr.fn, ease(a, tr.kind))
+			if self.t > tr.t1 then tr.ended = true end
+		end
+	end
+end
+function Timeline:jumpToEnd(total)
+	for i, e in ipairs(self.events) do if not self.fired[i] then self.fired[i] = true end end
+	for _, tr in ipairs(self.tracks) do if not tr.ended then pcall(tr.fn, 1) tr.ended = true end end
+	self.t = total
+end
+
+local Pose = { joints = {}, current = {}, conn = nil }
+local JOINTS_R15 = { "Waist", "Neck", "LeftShoulder", "RightShoulder", "LeftHip", "RightHip", "LeftKnee", "RightKnee", "LeftElbow", "RightElbow" }
+local JOINTS_R6 = { "RootJoint", "Neck", "Left Shoulder", "Right Shoulder", "Left Hip", "Right Hip" }
+function Pose:bind(ch)
+	self.joints = {}
+	for _, d in ipairs(ch:GetDescendants()) do
+		if d:IsA("Motor6D") then
+			for _, n in ipairs(JOINTS_R15) do if d.Name == n then self.joints[n] = d end end
+			for _, n in ipairs(JOINTS_R6) do if d.Name == n then self.joints[n] = d end end
+		end
+	end
+	self.current = {}
+	if self.conn then self.conn:Disconnect() end
+	self.conn = RunService.Stepped:Connect(function()
+		for name, cf in pairs(self.current) do
+			local j = self.joints[name]
+			if j then j.Transform = cf end
+		end
+	end)
+end
+function Pose:release()
+	if self.conn then self.conn:Disconnect() self.conn = nil end
+	for _, j in pairs(self.joints) do pcall(function() j.Transform = CFrame.new() end) end
+	self.joints = {} self.current = {}
+end
+local function rot(x, y, z) return CFrame.Angles(math.rad(x), math.rad(y), math.rad(z)) end
+
+local POSES = {
+	kneel = {
+		Waist = CFrame.new(0, -1.1, 0) * rot(18, 0, 0), Neck = rot(-30, 0, 0),
+		LeftShoulder = rot(-10, 0, -8), RightShoulder = rot(-10, 0, 8),
+		LeftHip = rot(-95, 0, 0), RightHip = rot(0, 0, 0), LeftKnee = rot(100, 0, 0), RightKnee = rot(-100, 0, 0),
+		RootJoint = CFrame.new(0, -1.1, 0) * rot(18, 0, 0), ["Left Shoulder"] = rot(0, 0, -10), ["Right Shoulder"] = rot(0, 0, 10), ["Left Hip"] = rot(0, 0, 95), ["Right Hip"] = rot(0, 0, 0),
+	},
+	stand = { Waist = CFrame.new(), Neck = CFrame.new(), LeftShoulder = CFrame.new(), RightShoulder = CFrame.new(), LeftHip = CFrame.new(), RightHip = CFrame.new(), LeftKnee = CFrame.new(), RightKnee = CFrame.new(),
+		RootJoint = CFrame.new(), ["Left Shoulder"] = CFrame.new(), ["Right Shoulder"] = CFrame.new(), ["Left Hip"] = CFrame.new(), ["Right Hip"] = CFrame.new() },
+	power = {
+		Waist = CFrame.new(0, 0.05, 0) * rot(-6, 0, 0), Neck = rot(14, 0, 0),
+		LeftShoulder = rot(0, 0, -70), RightShoulder = rot(0, 0, 70), LeftElbow = rot(0, 0, -25), RightElbow = rot(0, 0, 25),
+		LeftHip = rot(0, 0, -8), RightHip = rot(0, 0, 8), LeftKnee = CFrame.new(), RightKnee = CFrame.new(),
+		RootJoint = rot(-6, 0, 0), ["Left Shoulder"] = rot(0, 0, -70), ["Right Shoulder"] = rot(0, 0, 70), ["Left Hip"] = rot(0, 0, -8), ["Right Hip"] = rot(0, 0, 8),
+	},
+}
+local function blendPose(a, b, t)
+	local out = {}
+	for k, cfA in pairs(a) do
+		local cfB = b[k] or CFrame.new()
+		out[k] = cfA:Lerp(cfB, t)
+	end
+	for k, cfB in pairs(b) do if not out[k] then out[k] = CFrame.new():Lerp(cfB, t) end end
+	return out
+end
+
+local LightProps = { "Ambient", "OutdoorAmbient", "Brightness", "ClockTime", "FogColor", "FogEnd", "FogStart", "ExposureCompensation", "GlobalShadows", "ColorShift_Top", "ColorShift_Bottom" }
+local function snapshotLighting()
+	local s = { props = {}, effects = {} }
+	for _, k in ipairs(LightProps) do pcall(function() s.props[k] = Lighting[k] end) end
+	for _, e in ipairs(Lighting:GetChildren()) do
+		if e:IsA("PostEffect") or e:IsA("Atmosphere") then s.effects[e] = e.Enabled ~= nil and e.Enabled or true end
+	end
+	return s
+end
+local function restoreLighting(s)
+	for k, v in pairs(s.props) do pcall(function() Lighting[k] = v end) end
+	for e, enabled in pairs(s.effects) do pcall(function() if e.Parent then e.Enabled = enabled end end) end
+end
+
+local Fx = {}
+function Fx.bolt(from, to, colour, folder)
+
+	local segs = {}
+	local n = 9
+	local prev = from
+	for i = 1, n do
+		local t = i / n
+		local base = from:Lerp(to, t)
+		local jitter = (i < n) and Vector3.new((math.random() - 0.5) * 6, 0, (math.random() - 0.5) * 6) * (1 - t * 0.5) or Vector3.zero
+		local nxt = base + jitter
+		local mid = (prev + nxt) * 0.5
+		local len = (nxt - prev).Magnitude
+		local s = part({ Size = Vector3.new(0.25, 0.25, len), CFrame = CFrame.lookAt(mid, nxt), Color = Color3.new(1, 1, 1), Transparency = 0, Parent = folder })
+		local glow = part({ Size = Vector3.new(0.9, 0.9, len), CFrame = s.CFrame, Color = colour, Transparency = 0.6, Parent = folder })
+		segs[#segs + 1] = s segs[#segs + 1] = glow
+		if i > 2 and i < n - 1 and math.random() < 0.5 then
+			local bEnd = nxt + Vector3.new((math.random() - 0.5) * 10, -math.random() * 8, (math.random() - 0.5) * 10)
+			local bm = (nxt + bEnd) * 0.5
+			segs[#segs + 1] = part({ Size = Vector3.new(0.12, 0.12, (bEnd - nxt).Magnitude), CFrame = CFrame.lookAt(bm, bEnd), Color = Color3.new(1, 1, 1), Transparency = 0.2, Parent = folder })
+		end
+		prev = nxt
+	end
+	local light = Instance.new("PointLight") light.Color = colour light.Brightness = 12 light.Range = 60 light.Parent = segs[#segs]
+	task.spawn(function()
+		task.wait(0.06)
+		for _, s in ipairs(segs) do s.Transparency = math.min(1, s.Transparency + 0.4) end
+		task.wait(0.05)
+		for _, s in ipairs(segs) do s.Transparency = 0 end
+		task.wait(0.08)
+		for k = 1, 8 do
+			for _, s in ipairs(segs) do if s.Parent then s.Transparency = math.min(1, s.Transparency + 0.14) end end
+			light.Brightness = light.Brightness * 0.6
+			task.wait(0.03)
+		end
+		for _, s in ipairs(segs) do pcall(function() s:Destroy() end) end
+	end)
+end
+function Fx.ring(pos, colour, folder, maxSize, dur)
+	local r = part({ Shape = Enum.PartType.Cylinder, Size = Vector3.new(0.12, 1, 1), CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(90)), Color = colour, Transparency = 0.05, Parent = folder })
+	task.spawn(function()
+		local t0 = os.clock()
+		while os.clock() - t0 < dur do
+			local t = ease((os.clock() - t0) / dur, "out")
+			local s = 1 + maxSize * t
+			r.Size = Vector3.new(0.12, s, s)
+			r.Transparency = 0.05 + 0.95 * t
+			task.wait()
+		end
+		pcall(function() r:Destroy() end)
+	end)
+end
+function Fx.embers(parent, colour)
+	local a = Instance.new("Attachment") a.Parent = parent
+	local e = Instance.new("ParticleEmitter")
+	e.Texture = "rbxassetid://243660364" e.Color = ColorSequence.new(colour) e.LightEmission = 1
+	e.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.35), NumberSequenceKeypoint.new(1, 0) })
+	e.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
+	e.Lifetime = NumberRange.new(1.2, 2.2) e.Speed = NumberRange.new(1, 3) e.SpreadAngle = Vector2.new(180, 180)
+	e.Acceleration = Vector3.new(0, 3, 0) e.Drag = 1 e.Rate = 0 e.Parent = a
+	return e
+end
+function Fx.floorCircle(pos, colour, folder)
+	local layers = {}
+	local function layer(id, size, spin)
+		local a = assetId(id)
+		local p = part({ Size = Vector3.new(size, 0.05, size), Transparency = 1, Material = Enum.Material.SmoothPlastic, CFrame = CFrame.new(pos + Vector3.new(0, 0.08, 0)), Parent = folder })
+		local d
+		if a then d = Instance.new("Decal") d.Face = Enum.NormalId.Top d.Texture = a d.Color3 = colour d.Transparency = 1 d.Parent = p end
+		layers[#layers + 1] = { p = p, d = d, spin = spin }
+	end
+	layer(Intro.Assets.FloorGlow, 11, 0)
+	layer(Intro.Assets.CircleOuter, 8.5, 0.35)
+	layer(Intro.Assets.CircleInner, 8.5, -0.55)
+	return {
+		set = function(alpha)
+			for _, ly in ipairs(layers) do if ly.d then ly.d.Transparency = 1 - alpha * (ly.spin == 0 and 0.6 or 1) end end
+		end,
+		spin = function(t)
+			for _, ly in ipairs(layers) do ly.p.CFrame = CFrame.new(pos + Vector3.new(0, 0.08, 0)) * CFrame.Angles(0, t * ly.spin, 0) end
+		end,
+		destroy = function() for _, ly in ipairs(layers) do pcall(function() ly.p:Destroy() end) end end,
+	}
+end
+function Fx.chargeShell(ch, colour, folder)
+
+	local hrp = ch:FindFirstChild("HumanoidRootPart")
+	local slots, minY, maxY = {}, math.huge, -math.huge
+	for _, d in ipairs(ch:GetDescendants()) do
+		if d:IsA("BasePart") and d.Transparency < 1 and d.Name ~= "HumanoidRootPart" then
+			local c = d:Clone()
+			for _, k in ipairs(c:GetChildren()) do if not k:IsA("SpecialMesh") then k:Destroy() else k.TextureId = "" end end
+			if c:IsA("MeshPart") then c.TextureID = "" end
+			c.Anchored = true c.CanCollide = false c.CanQuery = false c.Material = Enum.Material.Neon c.Color = colour c.Transparency = 1 c.Parent = folder
+			local relY = hrp and (hrp.CFrame:ToObjectSpace(d.CFrame)).Position.Y or d.Position.Y
+			minY = math.min(minY, relY) maxY = math.max(maxY, relY)
+			slots[#slots + 1] = { c = c, src = d, relY = relY }
+		end
+	end
+	return {
+		set = function(alpha)
+			local cut = minY - 1 + (maxY - minY + 2) * alpha
+			for _, s in ipairs(slots) do
+				if s.src.Parent then
+					s.c.Size = s.src.Size * 1.04
+					s.c.CFrame = s.src.CFrame
+					local f = math.clamp((cut - s.relY) / 1.2, 0, 1)
+					s.c.Transparency = 1 - f * 0.55
+				end
+			end
+		end,
+		fade = function(alpha) for _, s in ipairs(slots) do s.c.Transparency = math.max(s.c.Transparency, alpha) end end,
+		destroy = function() for _, s in ipairs(slots) do pcall(function() s.c:Destroy() end) end end,
+	}
+end
+
+local function buildUi()
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "DexoriIntro" gui.IgnoreGuiInset = true gui.ResetOnSpawn = false gui.DisplayOrder = 999999
+	pcall(function() gui.Parent = (gethui and gethui()) or game:GetService("CoreGui") end)
+	if not gui.Parent then gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end
+	local black = Instance.new("Frame") black.Size = UDim2.new(1, 0, 1, 0) black.BackgroundColor3 = Color3.new(0, 0, 0) black.BorderSizePixel = 0 black.ZIndex = 1 black.Parent = gui
+	local barTop = Instance.new("Frame") barTop.Size = UDim2.new(1, 0, 0, 0) barTop.BackgroundColor3 = Color3.new(0, 0, 0) barTop.BorderSizePixel = 0 barTop.ZIndex = 2 barTop.Parent = gui
+	local barBot = Instance.new("Frame") barBot.AnchorPoint = Vector2.new(0, 1) barBot.Position = UDim2.new(0, 0, 1, 0) barBot.Size = UDim2.new(1, 0, 0, 0) barBot.BackgroundColor3 = Color3.new(0, 0, 0) barBot.BorderSizePixel = 0 barBot.ZIndex = 2 barBot.Parent = gui
+	local flash = Instance.new("Frame") flash.Size = UDim2.new(1, 0, 1, 0) flash.BackgroundColor3 = Color3.new(1, 1, 1) flash.BackgroundTransparency = 1 flash.BorderSizePixel = 0 flash.ZIndex = 3 flash.Parent = gui
+	local vig = Instance.new("Frame") vig.Size = UDim2.new(1, 0, 1, 0) vig.BackgroundColor3 = Color3.new(0, 0, 0) vig.BackgroundTransparency = 1 vig.BorderSizePixel = 0 vig.ZIndex = 2 vig.Parent = gui
+	local vg = Instance.new("UIGradient") vg.Rotation = 90 vg.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(0.5, 1), NumberSequenceKeypoint.new(1, 0.2) }) vg.Parent = vig
+
+	local spaced = {}
+	for c in string.gmatch(string.upper(Intro.Title), ".") do spaced[#spaced + 1] = c end
+	local title = Instance.new("TextLabel")
+	title.AnchorPoint = Vector2.new(0.5, 0.5) title.Position = UDim2.new(0.5, 0, 0.5, -10) title.Size = UDim2.new(1, 0, 0, 90)
+	title.BackgroundTransparency = 1 title.Text = table.concat(spaced, "  ") title.TextSize = 72
+	title.FontFace = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Bold)
+	title.TextColor3 = Color3.new(1, 1, 1) title.TextTransparency = 1 title.TextStrokeTransparency = 1 title.ZIndex = 4 title.Parent = gui
+	local streak = Instance.new("Frame") streak.AnchorPoint = Vector2.new(0.5, 0) streak.Position = UDim2.new(0.5, 0, 0.5, 40) streak.Size = UDim2.new(0, 0, 0, 2) streak.BackgroundColor3 = Intro.Colour streak.BorderSizePixel = 0 streak.ZIndex = 4 streak.Parent = gui
+	local sg = Instance.new("UIGradient") sg.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }) sg.Parent = streak
+	local sub = Instance.new("TextLabel")
+	sub.AnchorPoint = Vector2.new(0.5, 0) sub.Position = UDim2.new(0.5, 0, 0.5, 56) sub.Size = UDim2.new(1, 0, 0, 20)
+	sub.BackgroundTransparency = 1 sub.Text = Intro.Subtitle sub.TextSize = 14
+	sub.FontFace = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Medium)
+	sub.TextColor3 = Color3.fromRGB(180, 180, 188) sub.TextTransparency = 1 sub.ZIndex = 4 sub.Parent = gui
+	local skip = Instance.new("TextLabel")
+	skip.AnchorPoint = Vector2.new(1, 1) skip.Position = UDim2.new(1, -24, 1, -18) skip.Size = UDim2.new(0, 200, 0, 16)
+	skip.BackgroundTransparency = 1 skip.Text = "space to skip" skip.TextSize = 12 skip.TextXAlignment = Enum.TextXAlignment.Right
+	skip.FontFace = Font.new("rbxasset://fonts/families/BuilderSans.json", Enum.FontWeight.Medium)
+	skip.TextColor3 = Color3.fromRGB(140, 140, 150) skip.TextTransparency = 0.3 skip.ZIndex = 5 skip.Parent = gui
+	return { gui = gui, black = black, barTop = barTop, barBot = barBot, flash = flash, vig = vig, title = title, streak = streak, sub = sub, skip = skip }
+end
+
+function Intro:Play(opts)
+	opts = opts or {}
+	if opts.Force ~= true and seen() then return false end
+	local ch = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+	local hrp = ch:WaitForChild("HumanoidRootPart", 5)
+	local hum = ch:FindFirstChildOfClass("Humanoid")
+	if not hrp then return false end
+	markSeen()
+
+	local colour = opts.Colour or self.Colour
+	local folder = Instance.new("Folder") folder.Name = "_dexoriIntro" folder.Parent = Workspace
+	local ui = buildUi()
+	local cam = Workspace.CurrentCamera
+	local savedCamType, savedFov = cam.CameraType, cam.FieldOfView
+	local light = snapshotLighting()
+	local blur = Instance.new("BlurEffect") blur.Size = 0 blur.Parent = Lighting
+	local cc = Instance.new("ColorCorrectionEffect") cc.Saturation = -1 cc.Brightness = -0.15 cc.Contrast = 0.1 cc.TintColor = Color3.fromRGB(230, 220, 220) cc.Parent = Lighting
+	local bloom = Instance.new("BloomEffect") bloom.Intensity = 0.6 bloom.Size = 40 bloom.Threshold = 0.9 bloom.Parent = Lighting
+	local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
+	local atmoSaved = atmo and { Density = atmo.Density, Haze = atmo.Haze, Color = atmo.Color } or nil
+
+	local savedWalk, savedJump = hum and hum.WalkSpeed or 16, hum and hum.JumpPower or 50
+	if hum then hum.WalkSpeed = 0 hum.JumpPower = 0 end
+	pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
+	Pose:bind(ch)
+	Pose.current = POSES.kneel
+
+	local root = hrp.CFrame
+	local rootPos = CFrame.new(root.Position) * CFrame.Angles(0, math.atan2(-root.LookVector.X, -root.LookVector.Z), 0)
+	local floorY = rootPos.Y - ((hum and hum.HipHeight > 0) and hum.HipHeight or 2) - hrp.Size.Y * 0.5
+	do
+		local params = RaycastParams.new() params.FilterType = Enum.RaycastFilterType.Exclude params.FilterDescendantsInstances = { ch, folder }
+		local hit = Workspace:Raycast(hrp.Position, Vector3.new(0, -12, 0), params)
+		if hit then floorY = hit.Position.Y end
+	end
+	local feet = Vector3.new(rootPos.X, floorY, rootPos.Z)
+	local circle = Fx.floorCircle(feet, colour, folder)
+	local embers = Fx.embers(hrp, colour)
+	local charge = Fx.chargeShell(ch, colour, folder)
+
+	cam.CameraType = Enum.CameraType.Scriptable
+	local function camAt(dx, dy, dz, lookOffset)
+		local p = (rootPos * CFrame.new(dx, dy, dz)).Position
+		local look = rootPos.Position + (lookOffset or Vector3.new(0, 0, 0))
+		return CFrame.lookAt(p, look)
+	end
+	local shake = 0
+	local camCf = camAt(0, -1.2, 9, Vector3.new(0, -1.5, 0))
+	local fov = 60
+
+	local tl = Timeline.new()
+	local TOTAL = 12.6
+
+	tl:tween(0, 1.4, function(a) ui.black.BackgroundTransparency = a end, "out")
+	tl:tween(0, 0.8, function(a) ui.barTop.Size = UDim2.new(1, 0, 0, 90 * a) ui.barBot.Size = UDim2.new(1, 0, 0, 90 * a) end, "out")
+	tl:tween(0, 1, function(a) ui.vig.BackgroundTransparency = 1 - 0.55 * a end)
+
+	tl:at(0, function()
+		Lighting.FogStart = 0 Lighting.FogEnd = 70 Lighting.FogColor = Color3.fromRGB(20, 18, 20)
+		Lighting.Brightness = 0.6 Lighting.ClockTime = 20.5 Lighting.Ambient = Color3.fromRGB(40, 40, 46) Lighting.OutdoorAmbient = Color3.fromRGB(40, 40, 46)
+		if atmo then atmo.Density = 0.55 atmo.Haze = 4 end
+		playSound(Intro.Sounds.Rise, 0.6)
+	end)
+
+	tl:tween(0, 4.2, function(a)
+		local d = lerp(9, 6.5, a)
+		local y = lerp(-1.2, 0.2, a)
+		local side = lerp(0, 3, a)
+		camCf = camAt(side, y, d, Vector3.new(0, -1.2 + a * 0.8, 0))
+		fov = lerp(58, 52, a)
+	end, "inout")
+
+	tl:tween(1.2, 3.2, function(a) circle.set(a) end, "out")
+	tl:at(1.6, function() embers.Rate = 25 end)
+
+	tl:at(4.0, function()
+		local far = (rootPos * CFrame.new(-28, 0, -40)).Position
+		Fx.bolt(far + Vector3.new(0, 60, 0), Vector3.new(far.X, floorY, far.Z), Color3.fromRGB(255, 200, 200), folder)
+		ui.flash.BackgroundTransparency = 0.3
+		shake = 0.7
+		playSound(Intro.Sounds.Thunder, 1)
+	end)
+	tl:tween(4.0, 4.6, function(a) ui.flash.BackgroundTransparency = 0.3 + 0.7 * a end, "out")
+
+	tl:tween(4.2, 7.5, function(a)
+		local ang = lerp(0.35, 2.4, a)
+		local d = lerp(6.5, 7.5, a)
+		local x, z = math.sin(ang) * d, math.cos(ang) * d
+		camCf = camAt(x, lerp(0.2, 1.4, a), z, Vector3.new(0, lerp(-0.4, 0.6, a), 0))
+		fov = lerp(52, 46, a)
+	end, "inout")
+	tl:tween(4.3, 6.8, function(a) charge.set(a) end, "in")
+	tl:tween(4.3, 6.9, function(a) Pose.current = blendPose(POSES.kneel, POSES.stand, a) end, "inout")
+	tl:tween(6.4, 7.4, function(a) Pose.current = blendPose(POSES.stand, POSES.power, a) end, "back")
+	tl:tween(4.3, 7.3, function(a) embers.Rate = 25 + 120 * a end)
+	tl:tween(5.0, 7.5, function(a)
+		cc.Saturation = -1 + 0.5 * a
+		Lighting.FogEnd = lerp(70, 160, a)
+		if atmo then atmo.Density = lerp(0.55, 0.42, a) end
+	end)
+
+	tl:at(7.5, function()
+		Fx.ring(feet + Vector3.new(0, 0.15, 0), colour, folder, 26, 0.7)
+		Fx.ring(feet + Vector3.new(0, 0.15, 0), Color3.new(1, 1, 1), folder, 14, 0.45)
+		local behind = (rootPos * CFrame.new(0, 0, -7)).Position
+		Fx.bolt(behind + Vector3.new(0, 70, 0), Vector3.new(behind.X, floorY, behind.Z), colour, folder)
+		ui.flash.BackgroundTransparency = 0
+		shake = 1.4
+		embers.Rate = 400
+		playSound(Intro.Sounds.Impact, 1)
+		playSound(Intro.Sounds.Thunder, 0.8)
+	end)
+	tl:tween(7.5, 8.2, function(a) ui.flash.BackgroundTransparency = a end, "out")
+	tl:tween(7.5, 8.6, function(a) charge.fade(a) circle.set(1 - a) embers.Rate = 400 * (1 - a) end)
+	tl:tween(7.5, 9.5, function(a)
+		cc.Saturation = -0.5 + 0.5 * a cc.Brightness = -0.15 + 0.15 * a
+		Lighting.FogEnd = lerp(160, light.props.FogEnd or 100000, a)
+		Lighting.Brightness = lerp(0.6, light.props.Brightness or 2, a)
+		if atmo and atmoSaved then atmo.Density = lerp(0.42, atmoSaved.Density, a) atmo.Haze = lerp(4, atmoSaved.Haze, a) end
+		Lighting.ClockTime = lerp(20.5, light.props.ClockTime or 14, a)
+		Lighting.Ambient = Color3.fromRGB(40, 40, 46):Lerp(light.props.Ambient or Color3.fromRGB(40, 40, 46), a)
+		Lighting.OutdoorAmbient = Color3.fromRGB(40, 40, 46):Lerp(light.props.OutdoorAmbient or Color3.fromRGB(40, 40, 46), a)
+	end, "out")
+
+	tl:tween(7.5, 8.3, function(a)
+		local d = lerp(7.5, 15, a)
+		camCf = camAt(-6 * (1 - a) + 2 * a, lerp(1.4, 3.5, a), d, Vector3.new(0, 1.2, 0))
+		fov = lerp(46, 62, a)
+	end, "out")
+	tl:tween(8.3, 11.2, function(a) camCf = camAt(2 + 1.5 * a, 3.5 - 0.6 * a, 15 - 1.2 * a, Vector3.new(0, 1.2, 0)) end)
+	tl:tween(8.0, 8.9, function(a) ui.title.TextTransparency = 1 - a ui.title.Position = UDim2.new(0.5, 0, 0.5, -10 + 14 * (1 - a)) end, "out")
+	tl:tween(8.2, 9.0, function(a) ui.streak.Size = UDim2.new(0, 460 * a, 0, 2) end, "out")
+	tl:tween(8.7, 9.4, function(a) ui.sub.TextTransparency = 1 - a end, "out")
+	tl:tween(8.2, 10.5, function(a) blur.Size = 6 * math.sin(a * math.pi) end)
+
+	tl:tween(10.6, 11.4, function(a) ui.title.TextTransparency = a ui.sub.TextTransparency = a ui.streak.Size = UDim2.new(0, 460 * (1 - a), 0, 2) end, "in")
+	tl:tween(11.0, 12.0, function(a) ui.barTop.Size = UDim2.new(1, 0, 0, 90 * (1 - a)) ui.barBot.Size = UDim2.new(1, 0, 0, 90 * (1 - a)) ui.vig.BackgroundTransparency = 0.45 + 0.55 * a end, "inout")
+	tl:tween(11.0, 12.4, function(a) Pose.current = blendPose(POSES.power, POSES.stand, a) end, "inout")
+	tl:tween(11.2, 12.6, function(a) ui.black.BackgroundTransparency = 1 - 0.0 * a end)
+
+	local skipped, finished = false, false
+	local skipConn = UserInputService.InputBegan:Connect(function(inp, gpe)
+		if inp.KeyCode == Enum.KeyCode.Space or inp.KeyCode == Enum.KeyCode.Return then skipped = true end
+	end)
+	local last = os.clock()
+	local seed = math.random() * 100
+	while not finished do
+		local now = os.clock()
+		local dt = math.min(now - last, 0.05)
+		last = now
+		if skipped then tl:jumpToEnd(TOTAL) finished = true break end
+		tl:step(dt)
+		circle.spin(tl.t)
+		shake = math.max(0, shake - dt * 1.6)
+		local sx = math.noise(seed, now * 18) * shake * 0.6
+		local sy = math.noise(seed + 7, now * 20) * shake * 0.4
+		cam.CFrame = camCf * CFrame.new(sx, sy, 0) * CFrame.Angles(math.rad(sy * 1.5), math.rad(sx * 1.5), 0)
+		cam.FieldOfView = fov
+		if tl.t >= TOTAL then finished = true end
+		RunService.RenderStepped:Wait()
+	end
+	skipConn:Disconnect()
+
+	Pose:release()
+	local endCf = cam.CFrame
+	cam.CameraType = savedCamType
+	cam.FieldOfView = savedFov
+	restoreLighting(light)
+	if atmo and atmoSaved then atmo.Density = atmoSaved.Density atmo.Haze = atmoSaved.Haze atmo.Color = atmoSaved.Color end
+	pcall(function() blur:Destroy() end) pcall(function() cc:Destroy() end) pcall(function() bloom:Destroy() end)
+	if hum then hum.WalkSpeed = savedWalk hum.JumpPower = savedJump end
+	embers.Rate = 0
+	circle.destroy() charge.destroy()
+	task.delay(2, function() pcall(function() folder:Destroy() end) end)
+	local fade = TweenService:Create(ui.black, TweenInfo.new(0.01), { BackgroundTransparency = 1 })
+	fade:Play()
+	task.delay(0.6, function() pcall(function() ui.gui:Destroy() end) end)
+	return true
+end
+
+function Intro:Reset() pcall(function() if isfile(self.Flag) then delfile(self.Flag) end end) end
+function Intro:HasPlayed() return seen() end
+
+return Intro
+
+end)()
+
+return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager, Cosmetics = Cosmetics, Intro = Intro }
