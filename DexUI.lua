@@ -3150,7 +3150,9 @@ local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
 local Instakill = { Library = nil, On = false, Mode = "void", Radius = 250, OnlyOwned = true, Filter = "", Blacklist = "", Interval = 0.2, Threshold = 100, Kills = 0, Owned = 0, Waiting = 0, Esp = false,
-	Boost = false, Claim = false, ClaimWait = 0.8, ClaimReturn = true, Claimed = 0, _conn = nil, _busy = {}, _hl = {}, _last = 0, _claiming = false, _cooldown = {} }
+	Boost = false, Claim = false, ClaimMode = "contact", ClaimWait = 0.8, ClaimReturn = true, Claimed = 0,
+	Attack = nil, Learning = false, AttackAll = false, AttackRate = 12, AttackHits = 0,
+	_conn = nil, _busy = {}, _hl = {}, _last = 0, _claiming = false, _cooldown = {}, _hooked = false, _attackLast = 0 }
 
 -- ownership acquisition ---------------------------------------------------------------
 -- 1) simulation radius: the server hands ownership of unanchored parts to the nearest player *inside that player's
@@ -3173,15 +3175,32 @@ function Instakill:_claim(entry)
 		local origin = myRoot.CFrame
 		local t0 = os.clock()
 		local got = false
+		local contact = self.ClaimMode == "contact"
+		local savedCollide = {}
+		if contact and me then
+			for _, part in ipairs(me:GetDescendants()) do
+				if part:IsA("BasePart") then savedCollide[part] = part.CanCollide part.CanCollide = true end
+			end
+		end
+		local i = 0
 		while os.clock() - t0 < self.ClaimWait and entry.root.Parent do
+			i = i + 1
 			pcall(function()
-				myRoot.CFrame = entry.root.CFrame * CFrame.new(0, 3, 4)
-				myRoot.AssemblyLinearVelocity = Vector3.zero
+				if contact then
+					-- sit inside the mob's assembly, nudging so contacts keep generating
+					local jitter = Vector3.new(math.sin(i * 1.7) * 0.6, 0.4 + math.cos(i * 1.3) * 0.3, math.cos(i * 1.7) * 0.6)
+					myRoot.CFrame = entry.root.CFrame * CFrame.new(jitter)
+					myRoot.AssemblyLinearVelocity = Vector3.new(math.sin(i) * 12, 0, math.cos(i) * 12)
+				else
+					myRoot.CFrame = entry.root.CFrame * CFrame.new(0, 3, 4)
+					myRoot.AssemblyLinearVelocity = Vector3.zero
+				end
 			end)
 			boostRadius()
 			RunService.Heartbeat:Wait()
 			if isOwned(entry.root) then got = true break end
 		end
+		for part, cc in pairs(savedCollide) do if part.Parent then part.CanCollide = cc end end
 		if got then
 			self.Claimed = self.Claimed + 1
 			entry.owned = true
@@ -3291,6 +3310,132 @@ function Instakill:Fling(entry)
 	end)
 end
 
+-- no ownership needed: your character's velocity replicates, and the server's own simulation of the mob
+-- resolves the collision. drive through it at high speed with a spin and the server launches it for you.
+function Instakill:Ram(entry)
+	local m, root = entry.model, entry.root
+	if self._busy[m] then return end
+	self._busy[m] = true
+	task.spawn(function()
+		local me = LocalPlayer.Character
+		local myRoot = me and me:FindFirstChild("HumanoidRootPart")
+		if not myRoot then self._busy[m] = nil return end
+		local origin = myRoot.CFrame
+		local saved = {}
+		for _, part in ipairs(me:GetDescendants()) do
+			if part:IsA("BasePart") then saved[part] = part.CanCollide part.CanCollide = true end
+		end
+		local spin = Instance.new("BodyAngularVelocity")
+		spin.Name = "_ikSpin" spin.MaxTorque = Vector3.new(1, 1, 1) * 9e9 spin.AngularVelocity = Vector3.new(0, 4000, 0) spin.P = 9e9 spin.Parent = myRoot
+		for pass = 1, 4 do
+			if not root.Parent then break end
+			local dir = (root.Position - myRoot.Position)
+			local flat = Vector3.new(dir.X, 0, dir.Z)
+			flat = flat.Magnitude > 0.1 and flat.Unit or Vector3.new(1, 0, 0)
+			-- start just behind it, punch through, repeat from the other side
+			pcall(function() myRoot.CFrame = CFrame.new(root.Position - flat * 4 + Vector3.new(0, 0.5, 0)) end)
+			for _ = 1, 6 do
+				pcall(function()
+					myRoot.AssemblyLinearVelocity = flat * 700 + Vector3.new(0, 90, 0)
+					myRoot.AssemblyAngularVelocity = Vector3.new(0, 4000, 0)
+				end)
+				RunService.Heartbeat:Wait()
+			end
+			RunService.Heartbeat:Wait()
+		end
+		pcall(function() spin:Destroy() end)
+		for part, cc in pairs(saved) do if part.Parent then part.CanCollide = cc end end
+		pcall(function() myRoot.CFrame = origin myRoot.AssemblyLinearVelocity = Vector3.zero myRoot.AssemblyAngularVelocity = Vector3.zero end)
+		task.wait(1.5)
+		if not m.Parent or (entry.hum and entry.hum.Health <= 0) then self.Kills = self.Kills + 1 end
+		task.wait(2)
+		self._busy[m] = nil
+	end)
+end
+
+-- learned attack: capture the remote the game fires when YOU hit a mob, then replay it against every mob in range
+local function findSlots(args, mob)
+	local slots = {}
+	local mobRoot = mob:FindFirstChild("HumanoidRootPart") or mob.PrimaryPart
+	local function scan(tbl, path)
+		for k, v in pairs(tbl) do
+			local t = typeof(v)
+			if t == "Instance" then
+				if v == mob then slots[#slots + 1] = { path = path, key = k, kind = "model" }
+				elseif v:IsDescendantOf(mob) then
+					if v:IsA("Humanoid") then slots[#slots + 1] = { path = path, key = k, kind = "humanoid" }
+					elseif v:IsA("BasePart") then slots[#slots + 1] = { path = path, key = k, kind = "part", name = v.Name } end
+				end
+			elseif t == "Vector3" and mobRoot and (v - mobRoot.Position).Magnitude < 12 then
+				slots[#slots + 1] = { path = path, key = k, kind = "pos" }
+			elseif t == "CFrame" and mobRoot and (v.Position - mobRoot.Position).Magnitude < 12 then
+				slots[#slots + 1] = { path = path, key = k, kind = "cf" }
+			elseif t == "table" then
+				scan(v, { unpack(path), k })
+			end
+		end
+	end
+	scan(args, {})
+	return slots
+end
+local function deepCopy(v)
+	if type(v) ~= "table" then return v end
+	local out = {}
+	for k, x in pairs(v) do out[k] = deepCopy(x) end
+	return out
+end
+function Instakill:_startLearning()
+	if not (hookmetamethod and getnamecallmethod and newcclosure) then
+		if self.Library then self.Library:Notify({ Title = "instakill", Description = "executor has no hookmetamethod", Time = 4 }) end
+		return
+	end
+	self.Learning = true
+	if self._hooked then return end
+	self._hooked = true
+	local me = self
+	local old
+	old = hookmetamethod(game, "__namecall", newcclosure(function(this, ...)
+		local ok, method = pcall(getnamecallmethod)
+		if ok and me.Learning and (method == "FireServer" or method == "InvokeServer") and typeof(this) == "Instance" then
+			local args = { ... }
+			-- which mob is this call about? test every candidate in range
+			for _, e in ipairs(me:Mobs()) do
+				local slots = findSlots(args, e.model)
+				if #slots > 0 then
+					me.Attack = { remote = this, method = method, args = deepCopy(args), slots = slots, name = this.Name }
+					me.Learning = false
+					task.defer(function() if me.Library then me.Library:Notify({ Title = "instakill", Description = "learned " .. this.Name .. " (" .. #slots .. " target slot" .. (#slots > 1 and "s" or "") .. ")", Time = 4 }) end end)
+					break
+				end
+			end
+		end
+		return old(this, ...)
+	end))
+end
+function Instakill:Replay(entry)
+	local a = self.Attack
+	if not a or not a.remote or not a.remote.Parent then return false end
+	local args = deepCopy(a.args)
+	local mob = entry.model
+	local root = entry.root
+	for _, s in ipairs(a.slots) do
+		local tbl = args
+		for _, k in ipairs(s.path) do tbl = tbl and tbl[k] end
+		if tbl then
+			if s.kind == "model" then tbl[s.key] = mob
+			elseif s.kind == "humanoid" then tbl[s.key] = mob:FindFirstChildOfClass("Humanoid") or tbl[s.key]
+			elseif s.kind == "part" then tbl[s.key] = mob:FindFirstChild(s.name) or root
+			elseif s.kind == "pos" then tbl[s.key] = root.Position
+			elseif s.kind == "cf" then tbl[s.key] = root.CFrame end
+		end
+	end
+	local ok = pcall(function()
+		if a.method == "InvokeServer" then a.remote:InvokeServer(unpack(args)) else a.remote:FireServer(unpack(args)) end
+	end)
+	if ok then self.AttackHits = self.AttackHits + 1 end
+	return ok
+end
+
 function Instakill:_paintEsp(list)
 	local seen = {}
 	for _, e in ipairs(list) do
@@ -3319,8 +3464,8 @@ end
 function Instakill:_ensureLoop()
 	if self._conn then return end
 	self._conn = RunService.Heartbeat:Connect(function()
-		if not (self.On or self.Esp or self.Boost) then return end
-		if os.clock() - self._last < self.Interval then return end
+		if not (self.On or self.Esp or self.Boost or self.AttackAll) then return end
+		if os.clock() - self._last < math.min(self.Interval, 1 / math.max(self.AttackRate, 1)) then return end
 		self._last = os.clock()
 		if self.Boost then boostRadius() end
 		local list = self:Mobs()
@@ -3340,8 +3485,12 @@ function Instakill:_ensureLoop()
 		local waiting = 0
 		if self.On then
 			for _, e in ipairs(list) do
-				if e.owned or not self.OnlyOwned then
-					local pct = (e.hum.MaxHealth > 0) and (e.hum.Health / e.hum.MaxHealth * 100) or 0
+				local pct = (e.hum.MaxHealth > 0) and (e.hum.Health / e.hum.MaxHealth * 100) or 0
+				if self.Mode == "ram" then
+					if pct <= self.Threshold then self:Ram(e) else waiting = waiting + 1 end
+				elseif self.Mode == "attack" then
+					-- handled below at its own rate
+				elseif e.owned or not self.OnlyOwned then
 					if pct <= self.Threshold then
 						if self.Mode == "fling" then self:Fling(e) else self:Void(e) end
 					else
@@ -3351,6 +3500,10 @@ function Instakill:_ensureLoop()
 			end
 		end
 		self.Waiting = waiting
+		if (self.AttackAll or (self.On and self.Mode == "attack")) and self.Attack and os.clock() - self._attackLast >= 1 / math.max(self.AttackRate, 1) then
+			self._attackLast = os.clock()
+			for _, e in ipairs(list) do self:Replay(e) end
+		end
 	end)
 end
 
@@ -3368,7 +3521,7 @@ function Instakill:SetEsp(on)
 	if self.On or self.Esp then self:_ensureLoop() end
 end
 function Instakill:Stop()
-	self.On, self.Esp, self.Boost, self.Claim = false, false, false, false
+	self.On, self.Esp, self.Boost, self.Claim, self.AttackAll, self.Learning = false, false, false, false, false, false
 	self:_clearEsp()
 	if self._conn then self._conn:Disconnect() self._conn = nil end
 end
@@ -3382,7 +3535,7 @@ function Instakill:BuildBox(tab, side)
 	gb:AddToggle("IK_On", { Text = "Insta kill owned mobs", Default = false, Tooltip = "mobs the server lets you simulate get thrown into the void", Callback = function(v) self:Set(v) end })
 	gb:AddToggle("IK_Esp", { Text = "Ownership ESP", Default = false, Tooltip = "green = owned and ready, yellow = owned but above the hp threshold, red = server owns it", Callback = function(v) self:SetEsp(v) end })
 	gb:AddSlider("IK_Threshold", { Text = "Kill when hp is at or below", Default = 100, Min = 1, Max = 100, Rounding = 0, Suffix = "%", Tooltip = "100 = kill instantly. lower it if the game wants you to deal a share of the damage first", Callback = function(v) self.Threshold = v end })
-	gb:AddDropdown("IK_Mode", { Text = "Method", Values = { "void", "fling" }, Default = 1, Callback = function(v)
+	gb:AddDropdown("IK_Mode", { Text = "Method", Values = { "void", "fling", "ram", "attack" }, Default = 1, Tooltip = "void/fling need ownership. ram works on server-owned mobs. attack replays the game's own hit remote", Callback = function(v)
 		if type(v) == "table" then for k, on in pairs(v) do if on then v = k break end end end
 		self.Mode = v
 	end })
@@ -3392,9 +3545,32 @@ function Instakill:BuildBox(tab, side)
 	gb:AddInput("IK_Blacklist", { Text = "Never touch (comma separated)", Placeholder = "boss, muzan", Finished = true, Callback = function(v) self.Blacklist = tostring(v or "") end })
 	gb:AddDivider("get ownership")
 	gb:AddToggle("IK_Boost", { Text = "Boost simulation radius", Default = false, Tooltip = "tells the server you can simulate everything, so it hands you mobs from far away", Callback = function(v) self:SetBoost(v) end })
-	gb:AddToggle("IK_Claim", { Text = "Claim by teleporting to mobs", Default = false, Tooltip = "for mobs you don't own: teleports next to them, waits for ownership, kills, comes back", Callback = function(v) self.Claim = v end })
+	gb:AddToggle("IK_Claim", { Text = "Claim unowned mobs", Default = false, Tooltip = "teleports to mobs you don't own, takes ownership, kills, comes back", Callback = function(v) self.Claim = v end })
+	gb:AddDropdown("IK_ClaimMode", { Text = "Claim method", Values = { "contact", "proximity" }, Default = 1, Tooltip = "contact = sit inside the mob so the server sees a collision with your assembly (stronger). proximity = stand beside it", Callback = function(v)
+		if type(v) == "table" then for k, on in pairs(v) do if on then v = k break end end end
+		self.ClaimMode = v
+	end })
 	gb:AddSlider("IK_ClaimWait", { Text = "Claim wait", Default = 0.8, Min = 0.2, Max = 3, Rounding = 1, Suffix = "s", Callback = function(v) self.ClaimWait = v end })
 	gb:AddToggle("IK_ClaimReturn", { Text = "Return to where I was", Default = true, Callback = function(v) self.ClaimReturn = v end })
+	gb:AddDivider("learned attack")
+	local learned = gb:AddLabel("nothing learned yet")
+	gb:AddButton({ Text = "Learn attack (then hit a mob once)", Func = function()
+		self:_startLearning()
+		if self.Learning then self.Library:Notify({ Title = "instakill", Description = "now hit a mob with your normal attack", Time = 5 }) end
+	end })
+	gb:AddToggle("IK_AttackAll", { Text = "Attack every mob in range", Default = false, Tooltip = "replays the learned hit against all mobs in radius, no ownership needed", Callback = function(v) self.AttackAll = v if v then self:_ensureLoop() end end })
+	gb:AddSlider("IK_AttackRate", { Text = "Attack rate", Default = 12, Min = 1, Max = 60, Rounding = 0, Suffix = "/s", Callback = function(v) self.AttackRate = v end })
+	gb:AddButton({ Text = "Forget learned attack", Func = function() self.Attack = nil self.AttackHits = 0 end })
+	task.spawn(function()
+		while not Library.Unloaded do
+			pcall(function()
+				if self.Learning then learned:SetText("listening... hit a mob")
+				elseif self.Attack then learned:SetText(string.format("learned %s   hits sent %d", self.Attack.name, self.AttackHits))
+				else learned:SetText("nothing learned yet") end
+			end)
+			task.wait(0.5)
+		end
+	end)
 	task.spawn(function()
 		while not Library.Unloaded do
 			pcall(function() status:SetText(string.format("owned %d   waiting %d   claimed %d   killed %d", self.Owned, self.Waiting, self.Claimed, self.Kills)) end)
