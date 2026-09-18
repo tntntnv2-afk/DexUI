@@ -3366,12 +3366,12 @@ end
 local Timeline = {}
 Timeline.__index = Timeline
 function Timeline.new()
-	return setmetatable({ events = {}, tracks = {}, t = 0, done = false, fired = {} }, Timeline)
+	return setmetatable({ events = {}, tracks = {}, t = 0, done = false, fired = {}, speed = 1 }, Timeline)
 end
 function Timeline:at(t, fn) table.insert(self.events, { t = t, fn = fn }) return self end
 function Timeline:tween(t0, t1, fn, kind) table.insert(self.tracks, { t0 = t0, t1 = t1, fn = fn, kind = kind }) return self end
 function Timeline:step(dt)
-	self.t = self.t + dt
+	self.t = self.t + dt * self.speed
 	for i, e in ipairs(self.events) do
 		if not self.fired[i] and self.t >= e.t then self.fired[i] = true pcall(e.fn) end
 	end
@@ -3415,6 +3415,26 @@ function Pose:release()
 	self.joints = {} self.current = {}
 end
 local function rot(x, y, z) return CFrame.Angles(math.rad(x), math.rad(y), math.rad(z)) end
+
+local function catmull(p0, p1, p2, p3, t)
+	local t2, t3 = t * t, t * t * t
+	return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 + (-p0 + 3 * p1 - 3 * p2 + p3) * t3)
+end
+-- keys: { t=, x=, y=, z=, look=, fov=, cut=bool }; returns x,y,z,look,fov at time t
+local function samplePath(keys, t)
+	if t <= keys[1].t then local k = keys[1] return k.x, k.y, k.z, k.look, k.fov end
+	if t >= keys[#keys].t then local k = keys[#keys] return k.x, k.y, k.z, k.look, k.fov end
+	local i = 1
+	while keys[i + 1].t <= t do i = i + 1 end
+	local k1, k2 = keys[i], keys[i + 1]
+	if k2.cut then return k1.x, k1.y, k1.z, k1.look, k1.fov end       -- hold, then jump at the cut
+	local k0 = (i > 1 and not k1.cut) and keys[i - 1] or k1
+	local k3 = (i + 2 <= #keys and not keys[i + 2].cut) and keys[i + 2] or k2
+	local u = (t - k1.t) / math.max(k2.t - k1.t, 1e-3)
+	u = u * u * (3 - 2 * u)                                            -- smoothstep inside each segment
+	local function c(f) return catmull(k0[f], k1[f], k2[f], k3[f], u) end
+	return c("x"), c("y"), c("z"), c("look"), c("fov")
+end
 
 local POSES = {
 	bow = {
@@ -3527,17 +3547,93 @@ function Fx.floorCircle(pos, colour, folder)
 		if a then d = Instance.new("Decal") d.Face = Enum.NormalId.Top d.Texture = a d.Color3 = colour d.Transparency = 1 d.Parent = p end
 		layers[#layers + 1] = { p = p, d = d, spin = spin }
 	end
-	layer(Intro.Assets.FloorGlow, 11, 0)
-	layer(Intro.Assets.CircleOuter, 8.5, 0.35)
-	layer(Intro.Assets.CircleInner, 8.5, -0.55)
+	layer(Intro.Assets.FloorGlow, 12, 0)
+	layer(Intro.Assets.CircleOuter, 9, 0.35)
+	layer(Intro.Assets.CircleInner, 9, -0.55)
+	local rings = {}
+	for _, r in ipairs({ 4.6, 3.6 }) do
+		local N = 40
+		for i = 1, N do
+			local a = (i / N) * math.pi * 2
+			local seg = part({ Size = Vector3.new((2 * math.pi * r) / N * 1.06, 0.06, 0.1), Color = colour, Transparency = 1, Parent = folder })
+			rings[#rings + 1] = { p = seg, a = a, r = r, spin = r > 4 and 0.35 or -0.55 }
+		end
+	end
+	local light = Instance.new("PointLight") light.Color = colour light.Brightness = 0 light.Range = 20
+	light.Parent = part({ Size = Vector3.new(0.2, 0.2, 0.2), Transparency = 1, CFrame = CFrame.new(pos + Vector3.new(0, 1.5, 0)), Parent = folder })
 	return {
 		set = function(alpha)
-			for _, ly in ipairs(layers) do if ly.d then ly.d.Transparency = 1 - alpha * (ly.spin == 0 and 0.6 or 1) end end
+			for _, ly in ipairs(layers) do if ly.d then ly.d.Transparency = 1 - alpha * (ly.spin == 0 and 0.7 or 1) end end
+			for _, s in ipairs(rings) do s.p.Transparency = 1 - alpha end
+			light.Brightness = 5 * alpha
 		end,
 		spin = function(t)
 			for _, ly in ipairs(layers) do ly.p.CFrame = CFrame.new(pos + Vector3.new(0, 0.08, 0)) * CFrame.Angles(0, t * ly.spin, 0) end
+			for _, s in ipairs(rings) do
+				s.p.CFrame = CFrame.new(pos + Vector3.new(0, 0.12, 0)) * CFrame.Angles(0, s.a + t * s.spin, 0) * CFrame.new(0, 0, s.r) * CFrame.Angles(0, math.rad(90), 0)
+			end
 		end,
-		destroy = function() for _, ly in ipairs(layers) do pcall(function() ly.p:Destroy() end) end end,
+		destroy = function() for _, ly in ipairs(layers) do pcall(function() ly.p:Destroy() end) end for _, s in ipairs(rings) do pcall(function() s.p:Destroy() end) end end,
+	}
+end
+function Fx.cracks(pos, colour, folder, count)
+	local made = {}
+	for i = 1, count or 10 do
+		local a = math.rad(i * (360 / (count or 10)) + math.random(-14, 14))
+		local len = 4 + math.random() * 7
+		local seg = 3
+		local prev = pos
+		local dir = Vector3.new(math.cos(a), 0, math.sin(a))
+		for s = 1, seg do
+			local nxt = prev + dir * (len / seg) + Vector3.new((math.random() - 0.5) * 1.2, 0, (math.random() - 0.5) * 1.2)
+			nxt = Vector3.new(nxt.X, pos.Y, nxt.Z)
+			local mid = (prev + nxt) * 0.5
+			local w = 0.35 * (1 - (s - 1) / seg) + 0.08
+			local p = part({ Size = Vector3.new(w, 0.08, (nxt - prev).Magnitude), CFrame = CFrame.lookAt(mid, nxt), Color = colour, Transparency = 0, Parent = folder })
+			made[#made + 1] = p
+			prev = nxt
+		end
+	end
+	local light = Instance.new("PointLight") light.Color = colour light.Brightness = 6 light.Range = 26 light.Parent = made[1]
+	return {
+		fade = function(alpha) for _, p in ipairs(made) do p.Transparency = alpha end light.Brightness = 6 * (1 - alpha) end,
+		destroy = function() for _, p in ipairs(made) do pcall(function() p:Destroy() end) end end,
+	}
+end
+function Fx.debris(pos, colour, folder, count)
+	local chunks = {}
+	for i = 1, count or 14 do
+		local s = 0.3 + math.random() * 0.7
+		local p = part({ Size = Vector3.new(s, s * 0.7, s * 1.2), CFrame = CFrame.new(pos) * CFrame.Angles(math.random() * 6, math.random() * 6, math.random() * 6), Color = (i % 3 == 0) and colour or Color3.fromRGB(30, 30, 34), Material = (i % 3 == 0) and Enum.Material.Neon or Enum.Material.Slate, Parent = folder })
+		local a = math.random() * math.pi * 2
+		chunks[i] = { p = p, v = Vector3.new(math.cos(a) * (6 + math.random() * 8), 14 + math.random() * 10, math.sin(a) * (6 + math.random() * 8)), spin = Vector3.new(math.random() * 6, math.random() * 6, math.random() * 6), pos = pos, t = 0 }
+	end
+	return {
+		step = function(dt)
+			for _, c in ipairs(chunks) do
+				c.t = c.t + dt
+				c.v = c.v + Vector3.new(0, -34, 0) * dt
+				c.pos = c.pos + c.v * dt
+				if c.pos.Y < pos.Y then c.pos = Vector3.new(c.pos.X, pos.Y, c.pos.Z) c.v = Vector3.new(c.v.X * 0.5, -c.v.Y * 0.35, c.v.Z * 0.5) end
+				c.p.CFrame = CFrame.new(c.pos) * CFrame.Angles(c.spin.X * c.t, c.spin.Y * c.t, c.spin.Z * c.t)
+			end
+		end,
+		fade = function(alpha) for _, c in ipairs(chunks) do c.p.Transparency = alpha end end,
+		destroy = function() for _, c in ipairs(chunks) do pcall(function() c.p:Destroy() end) end end,
+	}
+end
+function Fx.glow(ch, colour)
+	local h = Instance.new("Highlight")
+	h.Adornee = ch h.FillColor = colour h.OutlineColor = colour h.FillTransparency = 1 h.OutlineTransparency = 1 h.DepthMode = Enum.HighlightDepthMode.Occluded
+	h.Parent = ch
+	local light = Instance.new("PointLight") light.Color = colour light.Brightness = 0 light.Range = 16 light.Parent = ch:FindFirstChild("HumanoidRootPart") or ch.PrimaryPart
+	return {
+		set = function(fill, outline, bright)
+			h.FillTransparency = fill h.OutlineTransparency = outline
+			light.Brightness = bright or 0
+		end,
+		colour = function(c) h.FillColor = c h.OutlineColor = c light.Color = c end,
+		destroy = function() pcall(function() h:Destroy() end) pcall(function() light:Destroy() end) end,
 	}
 end
 function Fx.chargeShell(ch, colour, folder)
@@ -3634,111 +3730,139 @@ function Intro:Play(opts)
 	Pose.current = POSES.bow
 
 	local root = hrp.CFrame
-	local yaw = math.atan2(-root.LookVector.X, -root.LookVector.Z)
+	local yaw0 = math.atan2(-root.LookVector.X, -root.LookVector.Z)
 	local floorY = root.Position.Y - ((hum and hum.HipHeight > 0) and hum.HipHeight or 2) - hrp.Size.Y * 0.5
 	do
 		local params = RaycastParams.new() params.FilterType = Enum.RaycastFilterType.Exclude params.FilterDescendantsInstances = { ch, folder }
 		local hit = Workspace:Raycast(hrp.Position, Vector3.new(0, -12, 0), params)
 		if hit then floorY = hit.Position.Y end
 	end
-	local feet = Vector3.new(root.Position.X, floorY, root.Position.Z)
-	local standRoot = CFrame.new(root.Position) * CFrame.Angles(0, yaw, 0)
-	local hover = 0
+	local basePos = root.Position
+	local feet = Vector3.new(basePos.X, floorY, basePos.Z)
+	local hover, spin = 0, 0
+	local function bodyCf() return CFrame.new(basePos) * CFrame.Angles(0, yaw0 + spin, 0) * CFrame.new(0, hover, 0) end
+	local standRoot = CFrame.new(basePos) * CFrame.Angles(0, yaw0, 0)
 	local circle = Fx.floorCircle(feet, colour, folder)
 	local embers = Fx.embers(hrp, colour)
-	local charge = Fx.chargeShell(ch, colour, folder)
+	local glow = Fx.glow(ch, colour)
+	local cracks, debris = nil, nil
 
 	local pinConn = RunService.Stepped:Connect(function()
 		pcall(function()
-			hrp.CFrame = standRoot * CFrame.new(0, hover, 0)
+			hrp.CFrame = bodyCf()
 			hrp.AssemblyLinearVelocity = Vector3.zero
 			hrp.AssemblyAngularVelocity = Vector3.zero
 		end)
 	end)
 
+	-- world drained cold, not grey: red still reads as red
+	cc.Saturation = -0.45 cc.Brightness = -0.06 cc.Contrast = 0.12 cc.TintColor = Color3.fromRGB(170, 178, 205)
+	local baseBright = light.props.Brightness or 2
+	Lighting.Brightness = math.max(baseBright * 0.6, 0.6)
+	if atmo then atmo.Density = math.min((atmoSaved and atmoSaved.Density or 0.3) + 0.1, 0.6) end
+
+	-- camera: ONE continuous path (character-local: x right, y up, z back = behind), with two hard cuts
 	cam.CameraType = Enum.CameraType.Scriptable
-	local function camAt(dx, dy, dz, lookY)
-		local p = (standRoot * CFrame.new(dx, dy, dz)).Position
-		local look = standRoot.Position + Vector3.new(0, (lookY or 0.4) + hover, 0)
-		return CFrame.lookAt(p, look)
-	end
+	local KEYS = {
+		{ t = 0.0,  x = -4.8, y = 0.5,  z = -8.5, look = 0.2, fov = 56 },
+		{ t = 2.2,  x = -3.6, y = 1.0,  z = -7.2, look = 0.9, fov = 52 },
+		{ t = 4.0,  x = -2.2, y = 1.6,  z = -6.4, look = 1.4, fov = 48 },
+		{ t = 4.0,  x = 6.5,  y = 1.1,  z = 2.5,  look = 1.2, fov = 50, cut = true },   -- CUT on the lightning: side/back angle
+		{ t = 6.0,  x = 5.2,  y = 1.8,  z = -3.5, look = 1.4, fov = 46 },
+		{ t = 7.5,  x = 3.2,  y = 2.4,  z = -5.6, look = 1.5, fov = 42 },
+		{ t = 7.5,  x = -1.5, y = 0.9,  z = -5.0, look = 1.1, fov = 62, cut = true },   -- CUT on the slam: low and close
+		{ t = 8.4,  x = 2.5,  y = 3.6,  z = -15.5, look = 1.3, fov = 60 },
+		{ t = 11.2, x = 4.2,  y = 3.0,  z = -14.0, look = 1.3, fov = 58 },
+		{ t = 12.6, x = 5.0,  y = 3.2,  z = -13.0, look = 1.3, fov = 58 },
+	}
 	local shake = 0
-	local camCf = camAt(-4.5, 0.6, -7.5, 0.2)
-	local fov = 55
+	local function camNow(t)
+		local x, y, z, look, f = samplePath(KEYS, t)
+		local p = (standRoot * CFrame.new(x, y, z)).Position
+		local target = basePos + Vector3.new(0, look + hover, 0)
+		return CFrame.lookAt(p, target), f
+	end
 
 	local tl = Timeline.new()
 	local TOTAL = 12.6
 
-	tl:tween(0, 0.9, function(a) ui.black.BackgroundTransparency = a end, "out")
+	-- open
+	tl:tween(0, 0.8, function(a) ui.black.BackgroundTransparency = a end, "out")
 	tl:tween(0, 0.8, function(a) ui.barTop.Size = UDim2.new(1, 0, 0, 90 * a) ui.barBot.Size = UDim2.new(1, 0, 0, 90 * a) end, "out")
 	tl:tween(0, 1, function(a) ui.vig.BackgroundTransparency = 1 - 0.5 * a end)
-	tl:at(0, function()
-		cc.Saturation = -1 cc.Brightness = -0.08 cc.Contrast = 0.15
-		Lighting.Brightness = math.max((light.props.Brightness or 2) * 0.55, 0.6)
-		if atmo then atmo.Density = math.min((atmoSaved and atmoSaved.Density or 0.3) + 0.12, 0.6) end
-		playSound(Intro.Sounds.Rise, 0.6)
-	end)
+	tl:at(0, function() playSound(Intro.Sounds.Rise, 0.6) end)
 
-	tl:tween(0, 4.2, function(a)
-		camCf = camAt(lerp(-4.5, -3.0, a), lerp(0.6, 1.2, a), lerp(-7.5, -6.2, a), lerp(0.2, 0.9, a))
-		fov = lerp(55, 50, a)
-	end, "inout")
-	tl:tween(0.6, 4.2, function(a) hover = 1.6 * a end, "inout")
-	tl:tween(1.0, 3.0, function(a) circle.set(a) end, "out")
-	tl:at(1.4, function() embers.Rate = 30 end)
+	-- rise + slow spin, circle wakes, faint glow builds
+	tl:tween(0.5, 4.0, function(a) hover = 1.8 * a end, "inout")
+	tl:tween(0.5, 7.2, function(a) spin = math.rad(200) * a end, "inout")
+	tl:tween(0.8, 2.8, function(a) circle.set(a) end, "out")
+	tl:at(1.2, function() embers.Rate = 35 end)
+	tl:tween(1.5, 4.0, function(a) glow.set(1 - 0.25 * a, 1 - 0.6 * a, 1.5 * a) end)
 
+	-- lightning 1 at the cut
 	tl:at(4.0, function()
-		local far = (standRoot * CFrame.new(14, 0, 30)).Position
-		Fx.bolt(far + Vector3.new(0, 70, 0), Vector3.new(far.X, floorY, far.Z), Color3.fromRGB(255, 210, 210), folder)
-		ui.flash.BackgroundTransparency = 0.45
-		shake = 0.6
+		local far = (standRoot * CFrame.new(-16, 0, 26)).Position
+		Fx.bolt(far + Vector3.new(0, 70, 0), Vector3.new(far.X, floorY, far.Z), Color3.fromRGB(255, 215, 215), folder)
+		ui.flash.BackgroundTransparency = 0.5
+		shake = 0.7
 		playSound(Intro.Sounds.Thunder, 1)
 	end)
-	tl:tween(4.0, 4.5, function(a) ui.flash.BackgroundTransparency = 0.45 + 0.55 * a end, "out")
+	tl:tween(4.0, 4.5, function(a) ui.flash.BackgroundTransparency = 0.5 + 0.5 * a end, "out")
 
-	tl:tween(4.2, 7.5, function(a)
-		local ang = lerp(-0.55, 0.75, a)
-		local d = lerp(6.2, 7.2, a)
-		camCf = camAt(math.sin(ang) * d, lerp(1.2, 2.0, a), -math.cos(ang) * d, lerp(0.9, 1.3, a))
-		fov = lerp(50, 44, a)
-	end, "inout")
-	tl:tween(4.3, 6.9, function(a) charge.set(a) end, "in")
-	tl:tween(4.3, 6.9, function(a) Pose.current = blendPose(POSES.bow, POSES.stand, a) end, "inout")
-	tl:tween(6.5, 7.4, function(a) Pose.current = blendPose(POSES.stand, POSES.power, a) end, "back")
-	tl:tween(4.3, 7.3, function(a) embers.Rate = 30 + 140 * a end)
-	tl:tween(5.0, 7.5, function(a) cc.Saturation = -1 + 0.45 * a end)
+	-- charge: head comes up, glow intensifies, embers thicken, colour starts bleeding back. ONE pose track, no overlap.
+	tl:tween(4.2, 6.5, function(a) Pose.current = blendPose(POSES.bow, POSES.stand, a) end, "inout")
+	tl:tween(6.5, 7.3, function(a) Pose.current = blendPose(POSES.stand, POSES.power, a) end, "back")
+	tl:tween(4.2, 7.4, function(a) glow.set(0.75 - 0.45 * a, 0.4 - 0.4 * a, 1.5 + 6 * a) end, "in")
+	tl:tween(4.2, 7.4, function(a) embers.Rate = 35 + 160 * a end)
+	tl:tween(4.6, 7.4, function(a) cc.Saturation = -0.45 + 0.25 * a end)
+	tl:at(6.9, function() tl.speed = 0.35 end)                       -- slow-mo into the slam
+	tl:tween(6.9, 7.5, function(a) blur.Size = 8 * a end)
 
-	tl:tween(7.2, 7.55, function(a) hover = 1.6 * (1 - a) end, "in")
+	-- slam
+	tl:tween(7.15, 7.5, function(a) hover = 1.8 * (1 - a) end, "in")
 	tl:at(7.5, function()
-		Fx.ring(feet + Vector3.new(0, 0.15, 0), colour, folder, 30, 0.8)
-		Fx.ring(feet + Vector3.new(0, 0.15, 0), Color3.new(1, 1, 1), folder, 16, 0.5)
-		local behind = (standRoot * CFrame.new(0, 0, 9)).Position
-		Fx.bolt(behind + Vector3.new(0, 70, 0), Vector3.new(behind.X, floorY, behind.Z), colour, folder)
+		tl.speed = 1
+		blur.Size = 0
+		glow.set(0, 0, 14) glow.colour(Color3.new(1, 1, 1))
+		Fx.ring(feet + Vector3.new(0, 0.15, 0), colour, folder, 34, 0.9)
+		Fx.ring(feet + Vector3.new(0, 0.15, 0), Color3.new(1, 1, 1), folder, 18, 0.55)
+		cracks = Fx.cracks(feet + Vector3.new(0, 0.05, 0), colour, folder, 12)
+		debris = Fx.debris(feet + Vector3.new(0, 0.4, 0), colour, folder, 16)
+		for i, off in ipairs({ CFrame.new(0, 0, 10), CFrame.new(-9, 0, 6), CFrame.new(9, 0, 7) }) do
+			task.delay((i - 1) * 0.08, function()
+				local b = (standRoot * off).Position
+				Fx.bolt(b + Vector3.new(0, 70, 0), Vector3.new(b.X, floorY, b.Z), i == 1 and colour or Color3.fromRGB(255, 220, 220), folder)
+			end)
+		end
 		ui.flash.BackgroundTransparency = 0
-		shake = 1.5
-		embers.Rate = 400
+		shake = 2.2
+		embers.Rate = 450
 		playSound(Intro.Sounds.Impact, 1)
-		playSound(Intro.Sounds.Thunder, 0.8)
+		playSound(Intro.Sounds.Thunder, 0.9)
 	end)
-	tl:tween(7.5, 8.2, function(a) ui.flash.BackgroundTransparency = a end, "out")
-	tl:tween(7.5, 8.6, function(a) charge.fade(a) circle.set(1 - a) embers.Rate = 400 * (1 - a) end)
-	tl:tween(7.5, 9.5, function(a)
-		cc.Saturation = -0.55 + 0.55 * a cc.Brightness = -0.08 + 0.08 * a cc.Contrast = 0.15 * (1 - a)
-		Lighting.Brightness = lerp(math.max((light.props.Brightness or 2) * 0.55, 0.6), light.props.Brightness or 2, a)
-		if atmo and atmoSaved then atmo.Density = lerp(math.min(atmoSaved.Density + 0.12, 0.6), atmoSaved.Density, a) end
+	tl:tween(7.5, 8.1, function(a) ui.flash.BackgroundTransparency = a end, "out")
+	tl:tween(7.6, 8.4, function(a) glow.colour(Color3.new(1, 1, 1):Lerp(colour, a)) glow.set(0.3 * a, 0, 14 * (1 - a) + 2) end)
+	tl:tween(7.5, 8.8, function(a) circle.set(1 - a) embers.Rate = 450 * (1 - a) end)
+	tl:tween(7.5, 9.6, function(a)
+		cc.Saturation = -0.2 + 0.2 * a cc.Brightness = -0.06 + 0.06 * a cc.Contrast = 0.12 * (1 - a)
+		cc.TintColor = Color3.fromRGB(170, 178, 205):Lerp(Color3.new(1, 1, 1), a)
+		Lighting.Brightness = lerp(math.max(baseBright * 0.6, 0.6), baseBright, a)
+		if atmo and atmoSaved then atmo.Density = lerp(math.min(atmoSaved.Density + 0.1, 0.6), atmoSaved.Density, a) end
 	end, "out")
 
-	tl:tween(7.5, 8.3, function(a)
-		local d = lerp(7.2, 16, a)
-		camCf = camAt(lerp(4.5, 3.0, a), lerp(2.0, 3.8, a), -d, 1.3)
-		fov = lerp(44, 60, a)
+	-- title punches in on the hero shot
+	tl:tween(8.2, 8.9, function(a)
+		ui.title.TextTransparency = 1 - a
+		local s = 1.35 - 0.35 * a
+		ui.title.Size = UDim2.new(1, 0, 0, 90 * s)
+		ui.title.TextSize = 72 * s
 	end, "out")
-	tl:tween(8.3, 11.2, function(a) camCf = camAt(3.0 + 1.5 * a, 3.8 - 0.8 * a, -(16 - 1.5 * a), 1.3) end)
-	tl:tween(8.0, 8.9, function(a) ui.title.TextTransparency = 1 - a ui.title.Position = UDim2.new(0.5, 0, 0.5, -10 + 14 * (1 - a)) end, "out")
-	tl:tween(8.2, 9.0, function(a) ui.streak.Size = UDim2.new(0, 460 * a, 0, 2) end, "out")
-	tl:tween(8.7, 9.4, function(a) ui.sub.TextTransparency = 1 - a end, "out")
-	tl:tween(8.2, 10.5, function(a) blur.Size = 6 * math.sin(a * math.pi) end)
+	tl:at(8.25, function() shake = math.max(shake, 0.6) end)
+	tl:tween(8.4, 9.1, function(a) ui.streak.Size = UDim2.new(0, 460 * a, 0, 2) end, "out")
+	tl:tween(8.8, 9.5, function(a) ui.sub.TextTransparency = 1 - a end, "out")
 
+	-- outro
+	tl:tween(9.5, 11.0, function(a) if cracks then cracks.fade(a) end if debris then debris.fade(a) end glow.set(0.3 + 0.7 * a, a, 2 * (1 - a)) end)
 	tl:tween(10.6, 11.4, function(a) ui.title.TextTransparency = a ui.sub.TextTransparency = a ui.streak.Size = UDim2.new(0, 460 * (1 - a), 0, 2) end, "in")
 	tl:tween(11.0, 12.0, function(a) ui.barTop.Size = UDim2.new(1, 0, 0, 90 * (1 - a)) ui.barBot.Size = UDim2.new(1, 0, 0, 90 * (1 - a)) ui.vig.BackgroundTransparency = 0.5 + 0.5 * a end, "inout")
 	tl:tween(11.0, 12.4, function(a) Pose.current = blendPose(POSES.power, POSES.stand, a) end, "inout")
@@ -3756,9 +3880,11 @@ function Intro:Play(opts)
 		if skipped then tl:jumpToEnd(TOTAL) finished = true break end
 		tl:step(dt)
 		circle.spin(tl.t)
-		shake = math.max(0, shake - dt * 1.6)
-		local sx = math.noise(seed, now * 18) * shake * 0.6
-		local sy = math.noise(seed + 7, now * 20) * shake * 0.4
+		if debris then debris.step(dt) end
+		shake = math.max(0, shake - dt * 1.8)
+		local sx = math.noise(seed, now * 18) * shake * 0.7
+		local sy = math.noise(seed + 7, now * 20) * shake * 0.5
+		local camCf, fov = camNow(tl.t)
 		cam.CFrame = camCf * CFrame.new(sx, sy, 0) * CFrame.Angles(math.rad(sy * 1.5), math.rad(sx * 1.5), 0)
 		cam.FieldOfView = fov
 		if tl.t >= TOTAL then finished = true end
@@ -3776,7 +3902,9 @@ function Intro:Play(opts)
 	pcall(function() blur:Destroy() end) pcall(function() cc:Destroy() end) pcall(function() bloom:Destroy() end)
 	if hum then hum.WalkSpeed = savedWalk hum.JumpPower = savedJump end
 	embers.Rate = 0
-	circle.destroy() charge.destroy()
+	circle.destroy() glow.destroy()
+	if cracks then cracks.destroy() end
+	if debris then debris.destroy() end
 	task.delay(2, function() pcall(function() folder:Destroy() end) end)
 	local fade = TweenService:Create(ui.black, TweenInfo.new(0.01), { BackgroundTransparency = 1 })
 	fade:Play()
