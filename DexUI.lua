@@ -3149,7 +3149,56 @@ local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local LocalPlayer = Players.LocalPlayer
 
-local Instakill = { Library = nil, On = false, Mode = "void", Radius = 250, OnlyOwned = true, Filter = "", Blacklist = "", Interval = 0.2, Threshold = 100, Kills = 0, Owned = 0, Waiting = 0, Esp = false, _conn = nil, _busy = {}, _hl = {}, _last = 0 }
+local Instakill = { Library = nil, On = false, Mode = "void", Radius = 250, OnlyOwned = true, Filter = "", Blacklist = "", Interval = 0.2, Threshold = 100, Kills = 0, Owned = 0, Waiting = 0, Esp = false,
+	Boost = false, Claim = false, ClaimWait = 0.8, ClaimReturn = true, Claimed = 0, _conn = nil, _busy = {}, _hl = {}, _last = 0, _claiming = false, _cooldown = {} }
+
+-- ownership acquisition ---------------------------------------------------------------
+-- 1) simulation radius: the server hands ownership of unanchored parts to the nearest player *inside that player's
+--    simulation radius*. pushing ours to infinity makes us eligible for everything.
+local function boostRadius()
+	pcall(function() sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge) end)
+	pcall(function() sethiddenproperty(LocalPlayer, "MaxSimulationRadius", math.huge) end)
+	pcall(function() LocalPlayer.SimulationRadius = math.huge end)
+	pcall(function() LocalPlayer.MaxSimulationRadius = math.huge end)
+end
+-- 2) proximity: stand next to it, the server usually re-assigns within a few physics steps
+function Instakill:_claim(entry)
+	if self._claiming then return end
+	if self._cooldown[entry.model] and os.clock() < self._cooldown[entry.model] then return end
+	self._claiming = true
+	task.spawn(function()
+		local me = LocalPlayer.Character
+		local myRoot = me and me:FindFirstChild("HumanoidRootPart")
+		if not myRoot or not entry.root.Parent then self._claiming = false return end
+		local origin = myRoot.CFrame
+		local t0 = os.clock()
+		local got = false
+		while os.clock() - t0 < self.ClaimWait and entry.root.Parent do
+			pcall(function()
+				myRoot.CFrame = entry.root.CFrame * CFrame.new(0, 3, 4)
+				myRoot.AssemblyLinearVelocity = Vector3.zero
+			end)
+			boostRadius()
+			RunService.Heartbeat:Wait()
+			if isOwned(entry.root) then got = true break end
+		end
+		if got then
+			self.Claimed = self.Claimed + 1
+			entry.owned = true
+			local pct = (entry.hum.MaxHealth > 0) and (entry.hum.Health / entry.hum.MaxHealth * 100) or 0
+			if pct <= self.Threshold then
+				if self.Mode == "fling" then self:Fling(entry) else self:Void(entry) end
+				task.wait(0.15)
+			end
+		else
+			self._cooldown[entry.model] = os.clock() + 4
+		end
+		if self.ClaimReturn and myRoot.Parent then
+			pcall(function() myRoot.CFrame = origin myRoot.AssemblyLinearVelocity = Vector3.zero end)
+		end
+		self._claiming = false
+	end)
+end
 
 local function isOwned(part)
 	if typeof(isnetworkowner) == "function" then
@@ -3270,13 +3319,23 @@ end
 function Instakill:_ensureLoop()
 	if self._conn then return end
 	self._conn = RunService.Heartbeat:Connect(function()
-		if not (self.On or self.Esp) then return end
+		if not (self.On or self.Esp or self.Boost) then return end
 		if os.clock() - self._last < self.Interval then return end
 		self._last = os.clock()
+		if self.Boost then boostRadius() end
 		local list = self:Mobs()
 		local owned = 0
 		for _, e in ipairs(list) do if e.owned then owned = owned + 1 end end
 		self.Owned = owned
+		if self.On and self.Claim and not self._claiming then
+			table.sort(list, function(a, b) return a.dist < b.dist end)
+			for _, e in ipairs(list) do
+				if not e.owned and not self._busy[e.model] and not (self._cooldown[e.model] and os.clock() < self._cooldown[e.model]) then
+					self:_claim(e)
+					break
+				end
+			end
+		end
 		if self.Esp then self:_paintEsp(list) else self:_clearEsp() end
 		local waiting = 0
 		if self.On then
@@ -3299,13 +3358,17 @@ function Instakill:Set(on)
 	self.On = on and true or false
 	if self.On or self.Esp then self:_ensureLoop() end
 end
+function Instakill:SetBoost(on)
+	self.Boost = on and true or false
+	if self.Boost then self:_ensureLoop() end
+end
 function Instakill:SetEsp(on)
 	self.Esp = on and true or false
 	if not self.Esp then self:_clearEsp() end
 	if self.On or self.Esp then self:_ensureLoop() end
 end
 function Instakill:Stop()
-	self.On, self.Esp = false, false
+	self.On, self.Esp, self.Boost, self.Claim = false, false, false, false
 	self:_clearEsp()
 	if self._conn then self._conn:Disconnect() self._conn = nil end
 end
@@ -3327,9 +3390,14 @@ function Instakill:BuildBox(tab, side)
 	gb:AddToggle("IK_OnlyOwned", { Text = "Only owned mobs", Default = true, Tooltip = "off = try everything in range, even if the server will snap it back", Callback = function(v) self.OnlyOwned = v end })
 	gb:AddInput("IK_Filter", { Text = "Only names containing (comma separated)", Placeholder = "leave empty for all", Finished = true, Callback = function(v) self.Filter = tostring(v or "") end })
 	gb:AddInput("IK_Blacklist", { Text = "Never touch (comma separated)", Placeholder = "boss, muzan", Finished = true, Callback = function(v) self.Blacklist = tostring(v or "") end })
+	gb:AddDivider("get ownership")
+	gb:AddToggle("IK_Boost", { Text = "Boost simulation radius", Default = false, Tooltip = "tells the server you can simulate everything, so it hands you mobs from far away", Callback = function(v) self:SetBoost(v) end })
+	gb:AddToggle("IK_Claim", { Text = "Claim by teleporting to mobs", Default = false, Tooltip = "for mobs you don't own: teleports next to them, waits for ownership, kills, comes back", Callback = function(v) self.Claim = v end })
+	gb:AddSlider("IK_ClaimWait", { Text = "Claim wait", Default = 0.8, Min = 0.2, Max = 3, Rounding = 1, Suffix = "s", Callback = function(v) self.ClaimWait = v end })
+	gb:AddToggle("IK_ClaimReturn", { Text = "Return to where I was", Default = true, Callback = function(v) self.ClaimReturn = v end })
 	task.spawn(function()
 		while not Library.Unloaded do
-			pcall(function() status:SetText(string.format("owned %d   waiting %d   killed %d", self.Owned, self.Waiting, self.Kills)) end)
+			pcall(function() status:SetText(string.format("owned %d   waiting %d   claimed %d   killed %d", self.Owned, self.Waiting, self.Claimed, self.Kills)) end)
 			task.wait(0.5)
 		end
 	end)
