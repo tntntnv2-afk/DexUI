@@ -3143,4 +3143,202 @@ return Cosmetics
 
 end)()
 
-return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager, Cosmetics = Cosmetics }
+local Instakill = (function()
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+
+local Instakill = { Library = nil, On = false, Mode = "void", Radius = 250, OnlyOwned = true, Filter = "", Blacklist = "", Interval = 0.2, Threshold = 100, Kills = 0, Owned = 0, Waiting = 0, Esp = false, _conn = nil, _busy = {}, _hl = {}, _last = 0 }
+
+local function isOwned(part)
+	if typeof(isnetworkowner) == "function" then
+		local ok, r = pcall(isnetworkowner, part)
+		if ok and type(r) == "boolean" then return r end
+	end
+	local ok, age = pcall(function() return part.ReceiveAge end)
+	return ok and age == 0
+end
+Instakill.IsOwned = isOwned
+
+local function isDummy(model)
+	local n = string.lower(model.Name)
+	local p = model.Parent and string.lower(model.Parent.Name) or ""
+	return n:find("dummy") or n:find("training") or n:find("target") or p:find("dummy") or p:find("training")
+end
+
+local function matches(model, filter, blacklist)
+	local n = string.lower(model.Name)
+	if blacklist ~= "" then
+		for word in string.gmatch(string.lower(blacklist), "[^,]+") do
+			word = word:gsub("^%s+", ""):gsub("%s+$", "")
+			if word ~= "" and n:find(word, 1, true) then return false end
+		end
+	end
+	if filter == "" then return true end
+	for word in string.gmatch(string.lower(filter), "[^,]+") do
+		word = word:gsub("^%s+", ""):gsub("%s+$", "")
+		if word ~= "" and n:find(word, 1, true) then return true end
+	end
+	return false
+end
+
+function Instakill:Mobs()
+	local out = {}
+	local me = LocalPlayer.Character
+	local myRoot = me and me:FindFirstChild("HumanoidRootPart")
+	if not myRoot then return out end
+	for _, m in ipairs(Workspace:GetDescendants()) do
+		if m:IsA("Model") and m ~= me and not Players:GetPlayerFromCharacter(m) then
+			local hum = m:FindFirstChildOfClass("Humanoid")
+			local root = m:FindFirstChild("HumanoidRootPart") or m.PrimaryPart
+			if hum and root and hum.Health > 0 and not root.Anchored and not isDummy(m) and matches(m, self.Filter, self.Blacklist) then
+				local d = (root.Position - myRoot.Position).Magnitude
+				if d <= self.Radius then out[#out + 1] = { model = m, root = root, hum = hum, dist = d, owned = isOwned(root) } end
+			end
+		end
+	end
+	return out
+end
+
+function Instakill:Void(entry)
+	local m, root = entry.model, entry.root
+	if self._busy[m] then return end
+	self._busy[m] = true
+	task.spawn(function()
+		local x, z = root.Position.X, root.Position.Z
+		for _ = 1, 12 do
+			if not root.Parent then break end
+			pcall(function()
+				root.CFrame = CFrame.new(x, -10000, z)
+				root.AssemblyLinearVelocity = Vector3.new(0, -800, 0)
+				root.AssemblyAngularVelocity = Vector3.zero
+			end)
+			RunService.Heartbeat:Wait()
+		end
+		task.wait(1.5)
+		if not m.Parent or (entry.hum and entry.hum.Health <= 0) then self.Kills = self.Kills + 1 end
+		task.wait(3)
+		self._busy[m] = nil
+	end)
+end
+
+function Instakill:Fling(entry)
+	local m, root = entry.model, entry.root
+	if self._busy[m] then return end
+	self._busy[m] = true
+	task.spawn(function()
+		local a = math.random() * math.pi * 2
+		for _ = 1, 6 do
+			if not root.Parent then break end
+			pcall(function()
+				root.AssemblyLinearVelocity = Vector3.new(math.cos(a) * 250, 400, math.sin(a) * 250)
+				root.AssemblyAngularVelocity = Vector3.new(80, 80, 80)
+			end)
+			RunService.Heartbeat:Wait()
+		end
+		task.wait(4)
+		self._busy[m] = nil
+	end)
+end
+
+function Instakill:_paintEsp(list)
+	local seen = {}
+	for _, e in ipairs(list) do
+		seen[e.model] = true
+		local hl = self._hl[e.model]
+		if not hl then
+			hl = Instance.new("Highlight")
+			hl.FillTransparency = 1 hl.OutlineTransparency = 0 hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			hl.Adornee = e.model hl.Parent = e.model
+			self._hl[e.model] = hl
+		end
+		local pct = (e.hum.MaxHealth > 0) and (e.hum.Health / e.hum.MaxHealth * 100) or 0
+		if not e.owned then hl.OutlineColor = Color3.fromRGB(255, 70, 70)
+		elseif pct > self.Threshold then hl.OutlineColor = Color3.fromRGB(255, 200, 60)
+		else hl.OutlineColor = Color3.fromRGB(80, 255, 120) end
+	end
+	for m, hl in pairs(self._hl) do
+		if not seen[m] or not m.Parent then pcall(function() hl:Destroy() end) self._hl[m] = nil end
+	end
+end
+function Instakill:_clearEsp()
+	for m, hl in pairs(self._hl) do pcall(function() hl:Destroy() end) end
+	self._hl = {}
+end
+
+function Instakill:_ensureLoop()
+	if self._conn then return end
+	self._conn = RunService.Heartbeat:Connect(function()
+		if not (self.On or self.Esp) then return end
+		if os.clock() - self._last < self.Interval then return end
+		self._last = os.clock()
+		local list = self:Mobs()
+		local owned = 0
+		for _, e in ipairs(list) do if e.owned then owned = owned + 1 end end
+		self.Owned = owned
+		if self.Esp then self:_paintEsp(list) else self:_clearEsp() end
+		local waiting = 0
+		if self.On then
+			for _, e in ipairs(list) do
+				if e.owned or not self.OnlyOwned then
+					local pct = (e.hum.MaxHealth > 0) and (e.hum.Health / e.hum.MaxHealth * 100) or 0
+					if pct <= self.Threshold then
+						if self.Mode == "fling" then self:Fling(e) else self:Void(e) end
+					else
+						waiting = waiting + 1
+					end
+				end
+			end
+		end
+		self.Waiting = waiting
+	end)
+end
+
+function Instakill:Set(on)
+	self.On = on and true or false
+	if self.On or self.Esp then self:_ensureLoop() end
+end
+function Instakill:SetEsp(on)
+	self.Esp = on and true or false
+	if not self.Esp then self:_clearEsp() end
+	if self.On or self.Esp then self:_ensureLoop() end
+end
+function Instakill:Stop()
+	self.On, self.Esp = false, false
+	self:_clearEsp()
+	if self._conn then self._conn:Disconnect() self._conn = nil end
+end
+
+function Instakill:SetLibrary(lib) self.Library = lib end
+
+function Instakill:BuildBox(tab, side)
+	local Library = self.Library
+	local gb = (side == "right") and tab:AddRightGroupbox("Mob insta kill") or tab:AddLeftGroupbox("Mob insta kill")
+	local status = gb:AddLabel("owned 0   waiting 0   killed 0")
+	gb:AddToggle("IK_On", { Text = "Insta kill owned mobs", Default = false, Tooltip = "mobs the server lets you simulate get thrown into the void", Callback = function(v) self:Set(v) end })
+	gb:AddToggle("IK_Esp", { Text = "Ownership ESP", Default = false, Tooltip = "green = owned and ready, yellow = owned but above the hp threshold, red = server owns it", Callback = function(v) self:SetEsp(v) end })
+	gb:AddSlider("IK_Threshold", { Text = "Kill when hp is at or below", Default = 100, Min = 1, Max = 100, Rounding = 0, Suffix = "%", Tooltip = "100 = kill instantly. lower it if the game wants you to deal a share of the damage first", Callback = function(v) self.Threshold = v end })
+	gb:AddDropdown("IK_Mode", { Text = "Method", Values = { "void", "fling" }, Default = 1, Callback = function(v)
+		if type(v) == "table" then for k, on in pairs(v) do if on then v = k break end end end
+		self.Mode = v
+	end })
+	gb:AddSlider("IK_Radius", { Text = "Radius", Default = 250, Min = 25, Max = 2000, Rounding = 0, Suffix = " studs", Callback = function(v) self.Radius = v end })
+	gb:AddToggle("IK_OnlyOwned", { Text = "Only owned mobs", Default = true, Tooltip = "off = try everything in range, even if the server will snap it back", Callback = function(v) self.OnlyOwned = v end })
+	gb:AddInput("IK_Filter", { Text = "Only names containing (comma separated)", Placeholder = "leave empty for all", Finished = true, Callback = function(v) self.Filter = tostring(v or "") end })
+	gb:AddInput("IK_Blacklist", { Text = "Never touch (comma separated)", Placeholder = "boss, muzan", Finished = true, Callback = function(v) self.Blacklist = tostring(v or "") end })
+	task.spawn(function()
+		while not Library.Unloaded do
+			pcall(function() status:SetText(string.format("owned %d   waiting %d   killed %d", self.Owned, self.Waiting, self.Kills)) end)
+			task.wait(0.5)
+		end
+	end)
+	Library:OnUnload(function() self:Stop() end)
+	return gb
+end
+
+return Instakill
+
+end)()
+
+return { Library = Library, ThemeManager = ThemeManager, SaveManager = SaveManager, Cosmetics = Cosmetics, Instakill = Instakill }
