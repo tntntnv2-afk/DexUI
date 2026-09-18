@@ -3417,19 +3417,19 @@ end
 local function rot(x, y, z) return CFrame.Angles(math.rad(x), math.rad(y), math.rad(z)) end
 
 local POSES = {
-	kneel = {
-		Waist = CFrame.new(0, -1.1, 0) * rot(18, 0, 0), Neck = rot(-30, 0, 0),
-		LeftShoulder = rot(-10, 0, -8), RightShoulder = rot(-10, 0, 8),
-		LeftHip = rot(-95, 0, 0), RightHip = rot(0, 0, 0), LeftKnee = rot(100, 0, 0), RightKnee = rot(-100, 0, 0),
-		RootJoint = CFrame.new(0, -1.1, 0) * rot(18, 0, 0), ["Left Shoulder"] = rot(0, 0, -10), ["Right Shoulder"] = rot(0, 0, 10), ["Left Hip"] = rot(0, 0, 95), ["Right Hip"] = rot(0, 0, 0),
+	bow = {
+		Waist = rot(16, 0, 0), Neck = rot(-38, 0, 0),
+		LeftShoulder = rot(12, 0, -6), RightShoulder = rot(12, 0, 6), LeftElbow = rot(-18, 0, 0), RightElbow = rot(-18, 0, 0),
+		LeftHip = rot(-8, 0, 0), RightHip = rot(-8, 0, 0), LeftKnee = rot(10, 0, 0), RightKnee = rot(10, 0, 0),
+		RootJoint = rot(16, 0, 0), ["Left Shoulder"] = rot(0, 0, -8), ["Right Shoulder"] = rot(0, 0, 8), ["Left Hip"] = rot(0, 0, 6), ["Right Hip"] = rot(0, 0, -6),
 	},
-	stand = { Waist = CFrame.new(), Neck = CFrame.new(), LeftShoulder = CFrame.new(), RightShoulder = CFrame.new(), LeftHip = CFrame.new(), RightHip = CFrame.new(), LeftKnee = CFrame.new(), RightKnee = CFrame.new(),
+	stand = { Waist = CFrame.new(), Neck = CFrame.new(), LeftShoulder = CFrame.new(), RightShoulder = CFrame.new(), LeftElbow = CFrame.new(), RightElbow = CFrame.new(), LeftHip = CFrame.new(), RightHip = CFrame.new(), LeftKnee = CFrame.new(), RightKnee = CFrame.new(),
 		RootJoint = CFrame.new(), ["Left Shoulder"] = CFrame.new(), ["Right Shoulder"] = CFrame.new(), ["Left Hip"] = CFrame.new(), ["Right Hip"] = CFrame.new() },
 	power = {
-		Waist = CFrame.new(0, 0.05, 0) * rot(-6, 0, 0), Neck = rot(14, 0, 0),
-		LeftShoulder = rot(0, 0, -70), RightShoulder = rot(0, 0, 70), LeftElbow = rot(0, 0, -25), RightElbow = rot(0, 0, 25),
-		LeftHip = rot(0, 0, -8), RightHip = rot(0, 0, 8), LeftKnee = CFrame.new(), RightKnee = CFrame.new(),
-		RootJoint = rot(-6, 0, 0), ["Left Shoulder"] = rot(0, 0, -70), ["Right Shoulder"] = rot(0, 0, 70), ["Left Hip"] = rot(0, 0, -8), ["Right Hip"] = rot(0, 0, 8),
+		Waist = rot(-10, 0, 0), Neck = rot(18, 0, 0),
+		LeftShoulder = rot(-22, 0, -42), RightShoulder = rot(-22, 0, 42), LeftElbow = rot(-30, 0, -10), RightElbow = rot(-30, 0, 10),
+		LeftHip = rot(0, 0, -6), RightHip = rot(0, 0, 6), LeftKnee = CFrame.new(), RightKnee = CFrame.new(),
+		RootJoint = rot(-10, 0, 0), ["Left Shoulder"] = rot(-20, 0, -40), ["Right Shoulder"] = rot(-20, 0, 40), ["Left Hip"] = rot(0, 0, -6), ["Right Hip"] = rot(0, 0, 6),
 	},
 }
 local function blendPose(a, b, t)
@@ -3631,89 +3631,91 @@ function Intro:Play(opts)
 	if hum then hum.WalkSpeed = 0 hum.JumpPower = 0 end
 	pcall(function() hrp.AssemblyLinearVelocity = Vector3.zero end)
 	Pose:bind(ch)
-	Pose.current = POSES.kneel
+	Pose.current = POSES.bow
 
 	local root = hrp.CFrame
-	local rootPos = CFrame.new(root.Position) * CFrame.Angles(0, math.atan2(-root.LookVector.X, -root.LookVector.Z), 0)
-	local floorY = rootPos.Y - ((hum and hum.HipHeight > 0) and hum.HipHeight or 2) - hrp.Size.Y * 0.5
+	local yaw = math.atan2(-root.LookVector.X, -root.LookVector.Z)
+	local floorY = root.Position.Y - ((hum and hum.HipHeight > 0) and hum.HipHeight or 2) - hrp.Size.Y * 0.5
 	do
 		local params = RaycastParams.new() params.FilterType = Enum.RaycastFilterType.Exclude params.FilterDescendantsInstances = { ch, folder }
 		local hit = Workspace:Raycast(hrp.Position, Vector3.new(0, -12, 0), params)
 		if hit then floorY = hit.Position.Y end
 	end
-	local feet = Vector3.new(rootPos.X, floorY, rootPos.Z)
+	local feet = Vector3.new(root.Position.X, floorY, root.Position.Z)
+	local standRoot = CFrame.new(root.Position) * CFrame.Angles(0, yaw, 0)
+	local hover = 0
 	local circle = Fx.floorCircle(feet, colour, folder)
 	local embers = Fx.embers(hrp, colour)
 	local charge = Fx.chargeShell(ch, colour, folder)
 
+	local pinConn = RunService.Stepped:Connect(function()
+		pcall(function()
+			hrp.CFrame = standRoot * CFrame.new(0, hover, 0)
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
+		end)
+	end)
+
 	cam.CameraType = Enum.CameraType.Scriptable
-	local function camAt(dx, dy, dz, lookOffset)
-		local p = (rootPos * CFrame.new(dx, dy, dz)).Position
-		local look = rootPos.Position + (lookOffset or Vector3.new(0, 0, 0))
+	local function camAt(dx, dy, dz, lookY)
+		local p = (standRoot * CFrame.new(dx, dy, dz)).Position
+		local look = standRoot.Position + Vector3.new(0, (lookY or 0.4) + hover, 0)
 		return CFrame.lookAt(p, look)
 	end
 	local shake = 0
-	local camCf = camAt(0, -1.2, 9, Vector3.new(0, -1.5, 0))
-	local fov = 60
+	local camCf = camAt(-4.5, 0.6, -7.5, 0.2)
+	local fov = 55
 
 	local tl = Timeline.new()
 	local TOTAL = 12.6
 
-	tl:tween(0, 1.4, function(a) ui.black.BackgroundTransparency = a end, "out")
+	tl:tween(0, 0.9, function(a) ui.black.BackgroundTransparency = a end, "out")
 	tl:tween(0, 0.8, function(a) ui.barTop.Size = UDim2.new(1, 0, 0, 90 * a) ui.barBot.Size = UDim2.new(1, 0, 0, 90 * a) end, "out")
-	tl:tween(0, 1, function(a) ui.vig.BackgroundTransparency = 1 - 0.55 * a end)
-
+	tl:tween(0, 1, function(a) ui.vig.BackgroundTransparency = 1 - 0.5 * a end)
 	tl:at(0, function()
-		Lighting.FogStart = 0 Lighting.FogEnd = 70 Lighting.FogColor = Color3.fromRGB(20, 18, 20)
-		Lighting.Brightness = 0.6 Lighting.ClockTime = 20.5 Lighting.Ambient = Color3.fromRGB(40, 40, 46) Lighting.OutdoorAmbient = Color3.fromRGB(40, 40, 46)
-		if atmo then atmo.Density = 0.55 atmo.Haze = 4 end
+		cc.Saturation = -1 cc.Brightness = -0.08 cc.Contrast = 0.15
+		Lighting.Brightness = math.max((light.props.Brightness or 2) * 0.55, 0.6)
+		if atmo then atmo.Density = math.min((atmoSaved and atmoSaved.Density or 0.3) + 0.12, 0.6) end
 		playSound(Intro.Sounds.Rise, 0.6)
 	end)
 
 	tl:tween(0, 4.2, function(a)
-		local d = lerp(9, 6.5, a)
-		local y = lerp(-1.2, 0.2, a)
-		local side = lerp(0, 3, a)
-		camCf = camAt(side, y, d, Vector3.new(0, -1.2 + a * 0.8, 0))
-		fov = lerp(58, 52, a)
+		camCf = camAt(lerp(-4.5, -3.0, a), lerp(0.6, 1.2, a), lerp(-7.5, -6.2, a), lerp(0.2, 0.9, a))
+		fov = lerp(55, 50, a)
 	end, "inout")
-
-	tl:tween(1.2, 3.2, function(a) circle.set(a) end, "out")
-	tl:at(1.6, function() embers.Rate = 25 end)
+	tl:tween(0.6, 4.2, function(a) hover = 1.6 * a end, "inout")
+	tl:tween(1.0, 3.0, function(a) circle.set(a) end, "out")
+	tl:at(1.4, function() embers.Rate = 30 end)
 
 	tl:at(4.0, function()
-		local far = (rootPos * CFrame.new(-28, 0, -40)).Position
-		Fx.bolt(far + Vector3.new(0, 60, 0), Vector3.new(far.X, floorY, far.Z), Color3.fromRGB(255, 200, 200), folder)
-		ui.flash.BackgroundTransparency = 0.3
-		shake = 0.7
+		local far = (standRoot * CFrame.new(14, 0, 30)).Position
+		Fx.bolt(far + Vector3.new(0, 70, 0), Vector3.new(far.X, floorY, far.Z), Color3.fromRGB(255, 210, 210), folder)
+		ui.flash.BackgroundTransparency = 0.45
+		shake = 0.6
 		playSound(Intro.Sounds.Thunder, 1)
 	end)
-	tl:tween(4.0, 4.6, function(a) ui.flash.BackgroundTransparency = 0.3 + 0.7 * a end, "out")
+	tl:tween(4.0, 4.5, function(a) ui.flash.BackgroundTransparency = 0.45 + 0.55 * a end, "out")
 
 	tl:tween(4.2, 7.5, function(a)
-		local ang = lerp(0.35, 2.4, a)
-		local d = lerp(6.5, 7.5, a)
-		local x, z = math.sin(ang) * d, math.cos(ang) * d
-		camCf = camAt(x, lerp(0.2, 1.4, a), z, Vector3.new(0, lerp(-0.4, 0.6, a), 0))
-		fov = lerp(52, 46, a)
+		local ang = lerp(-0.55, 0.75, a)
+		local d = lerp(6.2, 7.2, a)
+		camCf = camAt(math.sin(ang) * d, lerp(1.2, 2.0, a), -math.cos(ang) * d, lerp(0.9, 1.3, a))
+		fov = lerp(50, 44, a)
 	end, "inout")
-	tl:tween(4.3, 6.8, function(a) charge.set(a) end, "in")
-	tl:tween(4.3, 6.9, function(a) Pose.current = blendPose(POSES.kneel, POSES.stand, a) end, "inout")
-	tl:tween(6.4, 7.4, function(a) Pose.current = blendPose(POSES.stand, POSES.power, a) end, "back")
-	tl:tween(4.3, 7.3, function(a) embers.Rate = 25 + 120 * a end)
-	tl:tween(5.0, 7.5, function(a)
-		cc.Saturation = -1 + 0.5 * a
-		Lighting.FogEnd = lerp(70, 160, a)
-		if atmo then atmo.Density = lerp(0.55, 0.42, a) end
-	end)
+	tl:tween(4.3, 6.9, function(a) charge.set(a) end, "in")
+	tl:tween(4.3, 6.9, function(a) Pose.current = blendPose(POSES.bow, POSES.stand, a) end, "inout")
+	tl:tween(6.5, 7.4, function(a) Pose.current = blendPose(POSES.stand, POSES.power, a) end, "back")
+	tl:tween(4.3, 7.3, function(a) embers.Rate = 30 + 140 * a end)
+	tl:tween(5.0, 7.5, function(a) cc.Saturation = -1 + 0.45 * a end)
 
+	tl:tween(7.2, 7.55, function(a) hover = 1.6 * (1 - a) end, "in")
 	tl:at(7.5, function()
-		Fx.ring(feet + Vector3.new(0, 0.15, 0), colour, folder, 26, 0.7)
-		Fx.ring(feet + Vector3.new(0, 0.15, 0), Color3.new(1, 1, 1), folder, 14, 0.45)
-		local behind = (rootPos * CFrame.new(0, 0, -7)).Position
+		Fx.ring(feet + Vector3.new(0, 0.15, 0), colour, folder, 30, 0.8)
+		Fx.ring(feet + Vector3.new(0, 0.15, 0), Color3.new(1, 1, 1), folder, 16, 0.5)
+		local behind = (standRoot * CFrame.new(0, 0, 9)).Position
 		Fx.bolt(behind + Vector3.new(0, 70, 0), Vector3.new(behind.X, floorY, behind.Z), colour, folder)
 		ui.flash.BackgroundTransparency = 0
-		shake = 1.4
+		shake = 1.5
 		embers.Rate = 400
 		playSound(Intro.Sounds.Impact, 1)
 		playSound(Intro.Sounds.Thunder, 0.8)
@@ -3721,30 +3723,25 @@ function Intro:Play(opts)
 	tl:tween(7.5, 8.2, function(a) ui.flash.BackgroundTransparency = a end, "out")
 	tl:tween(7.5, 8.6, function(a) charge.fade(a) circle.set(1 - a) embers.Rate = 400 * (1 - a) end)
 	tl:tween(7.5, 9.5, function(a)
-		cc.Saturation = -0.5 + 0.5 * a cc.Brightness = -0.15 + 0.15 * a
-		Lighting.FogEnd = lerp(160, light.props.FogEnd or 100000, a)
-		Lighting.Brightness = lerp(0.6, light.props.Brightness or 2, a)
-		if atmo and atmoSaved then atmo.Density = lerp(0.42, atmoSaved.Density, a) atmo.Haze = lerp(4, atmoSaved.Haze, a) end
-		Lighting.ClockTime = lerp(20.5, light.props.ClockTime or 14, a)
-		Lighting.Ambient = Color3.fromRGB(40, 40, 46):Lerp(light.props.Ambient or Color3.fromRGB(40, 40, 46), a)
-		Lighting.OutdoorAmbient = Color3.fromRGB(40, 40, 46):Lerp(light.props.OutdoorAmbient or Color3.fromRGB(40, 40, 46), a)
+		cc.Saturation = -0.55 + 0.55 * a cc.Brightness = -0.08 + 0.08 * a cc.Contrast = 0.15 * (1 - a)
+		Lighting.Brightness = lerp(math.max((light.props.Brightness or 2) * 0.55, 0.6), light.props.Brightness or 2, a)
+		if atmo and atmoSaved then atmo.Density = lerp(math.min(atmoSaved.Density + 0.12, 0.6), atmoSaved.Density, a) end
 	end, "out")
 
 	tl:tween(7.5, 8.3, function(a)
-		local d = lerp(7.5, 15, a)
-		camCf = camAt(-6 * (1 - a) + 2 * a, lerp(1.4, 3.5, a), d, Vector3.new(0, 1.2, 0))
-		fov = lerp(46, 62, a)
+		local d = lerp(7.2, 16, a)
+		camCf = camAt(lerp(4.5, 3.0, a), lerp(2.0, 3.8, a), -d, 1.3)
+		fov = lerp(44, 60, a)
 	end, "out")
-	tl:tween(8.3, 11.2, function(a) camCf = camAt(2 + 1.5 * a, 3.5 - 0.6 * a, 15 - 1.2 * a, Vector3.new(0, 1.2, 0)) end)
+	tl:tween(8.3, 11.2, function(a) camCf = camAt(3.0 + 1.5 * a, 3.8 - 0.8 * a, -(16 - 1.5 * a), 1.3) end)
 	tl:tween(8.0, 8.9, function(a) ui.title.TextTransparency = 1 - a ui.title.Position = UDim2.new(0.5, 0, 0.5, -10 + 14 * (1 - a)) end, "out")
 	tl:tween(8.2, 9.0, function(a) ui.streak.Size = UDim2.new(0, 460 * a, 0, 2) end, "out")
 	tl:tween(8.7, 9.4, function(a) ui.sub.TextTransparency = 1 - a end, "out")
 	tl:tween(8.2, 10.5, function(a) blur.Size = 6 * math.sin(a * math.pi) end)
 
 	tl:tween(10.6, 11.4, function(a) ui.title.TextTransparency = a ui.sub.TextTransparency = a ui.streak.Size = UDim2.new(0, 460 * (1 - a), 0, 2) end, "in")
-	tl:tween(11.0, 12.0, function(a) ui.barTop.Size = UDim2.new(1, 0, 0, 90 * (1 - a)) ui.barBot.Size = UDim2.new(1, 0, 0, 90 * (1 - a)) ui.vig.BackgroundTransparency = 0.45 + 0.55 * a end, "inout")
+	tl:tween(11.0, 12.0, function(a) ui.barTop.Size = UDim2.new(1, 0, 0, 90 * (1 - a)) ui.barBot.Size = UDim2.new(1, 0, 0, 90 * (1 - a)) ui.vig.BackgroundTransparency = 0.5 + 0.5 * a end, "inout")
 	tl:tween(11.0, 12.4, function(a) Pose.current = blendPose(POSES.power, POSES.stand, a) end, "inout")
-	tl:tween(11.2, 12.6, function(a) ui.black.BackgroundTransparency = 1 - 0.0 * a end)
 
 	local skipped, finished = false, false
 	local skipConn = UserInputService.InputBegan:Connect(function(inp, gpe)
@@ -3769,6 +3766,7 @@ function Intro:Play(opts)
 	end
 	skipConn:Disconnect()
 
+	pinConn:Disconnect()
 	Pose:release()
 	local endCf = cam.CFrame
 	cam.CameraType = savedCamType
