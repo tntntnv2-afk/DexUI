@@ -1838,7 +1838,7 @@ function Library._AttachKeyPicker(parentObj, parentFrame, idx, cfg)
 	Library.OpenPopups[menu] = menu
 	local modes = {}
 	local modeList = cfg.Modes or { "Always", "Toggle", "Hold" }
-	menu.Size = UDim2.fromOffset(92, #modeList * 27 + 7)
+	menu.Size = UDim2.fromOffset(92, #modeList * 27 + 7 + 30)
 	for i, mode in ipairs(modeList) do
 		local mb = Create("TextButton", { Size = UDim2.new(1, 0, 0, 24), Text = "", AutoButtonColor = false, BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 1, LayoutOrder = i, ZIndex = 71, Parent = menuBody })
 		Corner(mb, 7)
@@ -1847,9 +1847,25 @@ function Library._AttachKeyPicker(parentObj, parentFrame, idx, cfg)
 		mb.MouseButton1Click:Connect(function() obj.Mode = mode menu.Visible = false obj:_render() end)
 		modes[mode] = { b = mb, l = ml }
 	end
+	do
+		local rule = Create("Frame", { Size = UDim2.new(1, 0, 0, 1), BackgroundTransparency = 0.4, BorderSizePixel = 0, LayoutOrder = #modeList + 1, ZIndex = 71, Parent = menuBody })
+		Library:AddToRegistry(rule, { BackgroundColor3 = "Outline" })
+		local cb = Create("TextButton", { Size = UDim2.new(1, 0, 0, 24), Text = "", AutoButtonColor = false, BackgroundColor3 = Color3.fromRGB(255, 255, 255), BackgroundTransparency = 1, LayoutOrder = #modeList + 2, ZIndex = 71, Parent = menuBody })
+		Corner(cb, 7)
+		local cl = Text(cb, "no key", 11, true, "FontDim")
+		cl.AnchorPoint = Vector2.new(0, 0.5); cl.Position = UDim2.new(0, 8, 0.5, 0); cl.Size = UDim2.new(1, -16, 0, 14); cl.ZIndex = 72
+		cb.MouseEnter:Connect(function() Tween(cb, { BackgroundTransparency = 0.94 }, 0.1) Tween(cl, { TextColor3 = Library.Theme.Risky }, 0.1) end)
+		cb.MouseLeave:Connect(function() Tween(cb, { BackgroundTransparency = 1 }, 0.12) Tween(cl, { TextColor3 = Library.Theme.FontDim }, 0.12) end)
+		cb.MouseButton1Click:Connect(function()
+			menu.Visible = false
+			binding = false
+			if obj.Mode == "Hold" and obj._held then obj._held = false if obj.Callback then pcall(obj.Callback, false) end end
+			obj:SetValue("None")
+		end)
+	end
 
 	function obj:_render()
-		kl.Text = binding and "..." or keyName(self.Value)
+		kl.Text = binding and "..." or ((self.Value == "None" or self.Value == nil) and "-" or keyName(self.Value))
 		kl.TextColor3 = binding and Library.Theme.Font or Library.Theme.Accent
 		for mode, r in pairs(modes) do
 			r.l.TextColor3 = (mode == self.Mode) and Library.Theme.Accent or Library.Theme.FontDim
@@ -1900,7 +1916,9 @@ function Library._AttachKeyPicker(parentObj, parentFrame, idx, cfg)
 		if binding then
 			if inp.UserInputType == Enum.UserInputType.Keyboard then
 				binding = false
-				obj:SetValue(inp.KeyCode == Enum.KeyCode.Escape and "None" or inp.KeyCode)
+				local k = inp.KeyCode
+				local clear = k == Enum.KeyCode.Escape or k == Enum.KeyCode.Backspace or k == Enum.KeyCode.Delete
+				obj:SetValue(clear and "None" or k)
 			elseif inp.UserInputType == Enum.UserInputType.MouseButton2 or inp.UserInputType == Enum.UserInputType.MouseButton3 then
 				binding = false
 				obj:SetValue(inp.UserInputType)
