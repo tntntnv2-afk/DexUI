@@ -1,3 +1,6 @@
+if not LPH_OBFUSCATED then
+	LPH_NO_VIRTUALIZE = function(f) return f end
+end
 local Library = (function()
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -107,12 +110,12 @@ local function Draggable(handle, frame)
 			inp.Changed:Connect(function() if inp.UserInputState == Enum.UserInputState.End then dragging = false end end)
 		end
 	end)
-	Library:GiveSignal(UserInputService.InputChanged:Connect(function(inp)
+	Library:GiveSignal(UserInputService.InputChanged:Connect(LPH_NO_VIRTUALIZE(function(inp)
 		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
 			local d = inp.Position - dragStart
 			frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
 		end
-	end))
+	end)))
 end
 
 local function Ripple(btn, color)
@@ -370,7 +373,7 @@ end
 local function startSnow()
 	if snowConn then return end
 	for i = 1, Library.Effects.SnowCount do flakes[i] = flakes[i] or makeFlake() end
-	snowConn = RunService.RenderStepped:Connect(function(dt)
+	snowConn = RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function(dt)
 		local t = os.clock()
 		for _, fl in ipairs(flakes) do
 			fl.y = fl.y + fl.vy * dt * 3
@@ -380,7 +383,7 @@ local function startSnow()
 			fl.f.Position = UDim2.new(fl.x, 0, fl.y, 0)
 			fl.f.Rotation = (t * fl.spin) % 360
 		end
-	end)
+	end))
 end
 local function stopSnow()
 	if snowConn then snowConn:Disconnect() snowConn = nil end
@@ -588,12 +591,12 @@ function Library:CreateWindow(cfg)
 			NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.42, 1),
 			NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(0.58, 1),
 			NumberSequenceKeypoint.new(1, 1) }), Parent = flow })
-		task.spawn(function()
+		task.spawn(LPH_NO_VIRTUALIZE(function()
 			while not Library.Unloaded and g.Parent do
 				g.Rotation = (g.Rotation + 1.4) % 360
 				task.wait(0.03)
 			end
-		end)
+		end))
 	end
 	window.Frame = main
 
@@ -602,14 +605,14 @@ function Library:CreateWindow(cfg)
 	Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = ember })
 	self:AddToRegistry(ember, { BackgroundColor3 = "Accent" })
 	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.45, 0.55), NumberSequenceKeypoint.new(1, 0.15) }), Parent = ember })
-	task.spawn(function()
+	task.spawn(LPH_NO_VIRTUALIZE(function()
 		local t = 0
 		while not Library.Unloaded and ember.Parent do
 			t = t + task.wait(0.05)
 			ember.BackgroundTransparency = 0.93 + 0.02 * math.sin(t * 0.7)
 			ember.Position = UDim2.new(0.5 + 0.03 * math.sin(t * 0.25), 0, 1, 40)
 		end
-	end)
+	end))
 
 	-- ------------------------------------------------------------ rail (the original look, 5 tabs visible, little arrows)
 	local RAIL, HEAD, FOOT = 150, 58, 28
@@ -669,14 +672,14 @@ function Library:CreateWindow(cfg)
 		end
 		local core = glowStroke(1.5, 0)
 		local haze = glowStroke(4, 0.72)
-		task.spawn(function()
+		task.spawn(LPH_NO_VIRTUALIZE(function()
 			local rot = 0
 			while not Library.Unloaded and core.Parent do
 				local dt = task.wait(0.03)
 				rot = (rot + 55 * (dt or 0.03)) % 360
 				core.Rotation, haze.Rotation = rot, rot
 			end
-		end)
+		end))
 	end
 	local function maxScroll() return math.max(0, tabList.AbsoluteCanvasSize.Y - tabList.AbsoluteSize.Y) end
 	local function refreshArrows()
@@ -835,11 +838,11 @@ function Library:CreateWindow(cfg)
 	task.spawn(function()
 		local frames, acc, fps = 0, 0, 0
 		local hist = {}
-		Library:GiveSignal(RunService.RenderStepped:Connect(function(dt) frames = frames + 1 acc = acc + dt if acc >= 1 then fps = frames frames = 0 acc = 0 end end))
+		Library:GiveSignal(RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function(dt) frames = frames + 1 acc = acc + dt if acc >= 1 then fps = frames frames = 0 acc = 0 end end)))
 		while not Library.Unloaded do
 			local ping = ""
 			pcall(function() ping = game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValueString():match("^(%d+)") or "" end)
-			footR.Text = string.format("%s     %d fps     %s ms", tostring(LocalPlayer.DisplayName), fps, ping)
+			footR.Text = string.format("%d fps     %s ms", fps, ping)
 			table.insert(hist, fps)
 			if #hist > 13 then table.remove(hist, 1) end
 			local mx = 1
@@ -1084,7 +1087,7 @@ function Library:CreateWindow(cfg)
 		end
 		local resizing, startPos, startSize = false, nil, nil
 		grip.InputBegan:Connect(function(inp) if IsPressed(inp) then resizing = true startPos = inp.Position startSize = main.AbsoluteSize end end)
-		self:GiveSignal(UserInputService.InputChanged:Connect(function(inp)
+		self:GiveSignal(UserInputService.InputChanged:Connect(LPH_NO_VIRTUALIZE(function(inp)
 			if resizing and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
 				local d = inp.Position - startPos
 				local w = math.clamp(startSize.X + d.X, 560, ScreenGui.AbsoluteSize.X - 20)
@@ -1092,7 +1095,7 @@ function Library:CreateWindow(cfg)
 				size = UDim2.fromOffset(math.floor(w), math.floor(h))
 				main.Size = size
 			end
-		end))
+		end)))
 		self:GiveSignal(UserInputService.InputEnded:Connect(function(inp) if IsPressed(inp) then resizing = false end end))
 	end
 
@@ -1364,9 +1367,9 @@ function GroupboxMethods:AddSlider(idx, cfg)
 	end
 	local chipScale = Create("UIScale", { Scale = 1, Parent = chip })
 	hit.InputBegan:Connect(function(inp) if IsPressed(inp) then dragging = true Tween(knob, { Size = UDim2.fromOffset(14, 14) }, 0.12, Enum.EasingStyle.Back) Tween(chipScale, { Scale = 1.12 }, 0.12, Enum.EasingStyle.Back) fromX(inp.Position.X) end end)
-	Library:GiveSignal(UserInputService.InputChanged:Connect(function(inp)
+	Library:GiveSignal(UserInputService.InputChanged:Connect(LPH_NO_VIRTUALIZE(function(inp)
 		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then fromX(inp.Position.X) end
-	end))
+	end)))
 	Library:GiveSignal(UserInputService.InputEnded:Connect(function(inp)
 		if IsPressed(inp) and dragging then dragging = false Tween(knob, { Size = UDim2.fromOffset(10, 10) }, 0.14) Tween(chipScale, { Scale = 1 }, 0.16) end
 	end))
@@ -1767,9 +1770,9 @@ function Library._AttachColorPicker(parentObj, parentFrame, idx, cfg)
 	hueHit.InputBegan:Connect(function(inp) if IsPressed(inp) then drag = "hue" apply("hue", inp.Position) end end)
 	if obj._aHit then obj._aHit.InputBegan:Connect(function(inp) if IsPressed(inp) then drag = "alpha" apply("alpha", inp.Position) end end) end
 	if rotTrack then rotTrack.InputBegan:Connect(function(inp) if IsPressed(inp) then drag = "rot" apply("rot", inp.Position) end end) end
-	Library:GiveSignal(UserInputService.InputChanged:Connect(function(inp)
+	Library:GiveSignal(UserInputService.InputChanged:Connect(LPH_NO_VIRTUALIZE(function(inp)
 		if drag and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then apply(drag, inp.Position) end
-	end))
+	end)))
 	Library:GiveSignal(UserInputService.InputEnded:Connect(function(inp) if IsPressed(inp) then drag = nil end end))
 	hexBox.FocusLost:Connect(function() local c = fromHex(hexBox.Text) if c then setCurrent(c) else render() end end)
 	if stopA then
@@ -2083,12 +2086,12 @@ function GroupboxMethods:AddESPPreview(cfg)
 		local mid = math.max(0, (sink.AbsoluteCanvasSize.Y - sink.AbsoluteSize.Y) * 0.5)
 		if math.abs(sink.CanvasPosition.Y - mid) > 0.5 then sink.CanvasPosition = Vector2.new(0, mid) end
 	end)
-	Library:GiveSignal(UserInputService.InputChanged:Connect(function(inp)
+	Library:GiveSignal(UserInputService.InputChanged:Connect(LPH_NO_VIRTUALIZE(function(inp)
 		if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
 			yaw = yaw + (inp.Position.X - lastX) * 0.012
 			lastX = inp.Position.X
 		end
-	end))
+	end)))
 	Library:GiveSignal(UserInputService.InputEnded:Connect(function(inp)
 		if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then dragging = false end
 	end))
@@ -2205,7 +2208,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 		table.insert(preview.Tabs, tab)
 	end
 
-	Library:GiveSignal(RunService.RenderStepped:Connect(function()
+	Library:GiveSignal(RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function()
 		if not canvas.Visible or not f:IsDescendantOf(ScreenGui) then return end
 		if dummy then
 			local ok, boxCf = pcall(function() return dummy:GetBoundingBox() end)
@@ -2215,7 +2218,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 			for _, g in ipairs(glowParts) do if g.src.Parent then g.part.CFrame = g.src.CFrame end end
 		end
 		for _, t in ipairs(preview.Tabs) do if t.Page.Visible then t:_layout() end end
-	end))
+	end)))
 
 	-- pop-out
 	local popBtn = Create("TextButton", { Size = UDim2.fromOffset(22, 22), Position = UDim2.new(1, -30, 0, 8), Text = "", AutoButtonColor = false, BackgroundTransparency = 0.4, ZIndex = 13, Parent = canvas })
@@ -2843,14 +2846,14 @@ Cosmetics.StepLife = 0.7
 Cosmetics.StepJumpBurst = true
 for k, v in pairs(DEFAULTS) do Cosmetics.Colour[k] = v.colour Cosmetics.Alpha[k] = v.alpha Cosmetics.On[k] = false end
 
-local function getChar()
+local getChar = LPH_NO_VIRTUALIZE(function()
 	local ch = LocalPlayer.Character
 	if not ch then return nil end
 	local hrp = ch:FindFirstChild("HumanoidRootPart")
 	local head = ch:FindFirstChild("Head")
 	local torso = ch:FindFirstChild("UpperTorso") or ch:FindFirstChild("Torso")
 	return ch, hrp, head, torso
-end
+end)
 
 function Cosmetics:SetLibrary(lib) self.Library = lib end
 
@@ -2962,7 +2965,7 @@ function Cosmetics:_spawnRing(pos, big)
 		p.Size = Vector3.new(0.05, size * 0.55, size * 0.55)
 		p.CFrame = CFrame.new(pos) * CFrame.Angles(0, 0, math.rad(90))
 	end
-	task.spawn(function()
+	task.spawn(LPH_NO_VIRTUALIZE(function()
 		local t0 = os.clock()
 		local spin = (math.random() > 0.5 and 1 or -1) * 0.6
 		while p.Parent do
@@ -2981,7 +2984,7 @@ function Cosmetics:_spawnRing(pos, big)
 			task.wait()
 		end
 		pcall(function() p:Destroy() end)
-	end)
+	end))
 end
 
 function Cosmetics:_floorY(ch, hrp)
@@ -3025,7 +3028,7 @@ function Cosmetics:_buildField()
 	return { kind = "Field", ball = ball }
 end
 
-function Cosmetics:_update(dt)
+Cosmetics._update = LPH_NO_VIRTUALIZE(function(self, dt)
 	local ch, hrp, head, torso = getChar()
 	if not (ch and hrp) then return end
 	local t = os.clock()
@@ -3105,11 +3108,11 @@ function Cosmetics:_update(dt)
 			elseif d:IsA("Decal") then d.Transparency = self.CharAlpha end
 		end
 	end
-end
+end)
 
 function Cosmetics:_ensureLoop()
 	if self._conn then return end
-	self._conn = RunService.RenderStepped:Connect(function(dt) pcall(function() self:_update(dt) end) end)
+	self._conn = RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function(dt) pcall(function() self:_update(dt) end) end))
 end
 
 function Cosmetics:_destroyItem(kind)
@@ -3165,7 +3168,7 @@ end
 
 Cosmetics.After = { On = false, Colour = Color3.fromRGB(255, 60, 60), Neon = true, Count = 3, Gap = 0.13, Life = 0.45, _hist = {}, _ghosts = {}, _conn = nil, _last = 0 }
 
-local function snapshotPose(ch)
+local snapshotPose = LPH_NO_VIRTUALIZE(function(ch)
 
 	local hrp = ch:FindFirstChild("HumanoidRootPart")
 	if not hrp then return nil end
@@ -3176,7 +3179,7 @@ local function snapshotPose(ch)
 		end
 	end
 	return pose
-end
+end)
 
 function Cosmetics.After:_makeGhost()
 	local ch = LocalPlayer.Character
@@ -3213,7 +3216,7 @@ function Cosmetics.After:_makeGhost()
 	return { model = model, slots = slots }
 end
 
-function Cosmetics.After:_apply(ghost, pose, alpha)
+Cosmetics.After._apply = LPH_NO_VIRTUALIZE(function(self, ghost, pose, alpha)
 	local col = Cosmetics.Rainbow and Color3.fromHSV((os.clock() * 0.15) % 1, 0.85, 1) or self.Colour
 
 	for i, slot in ipairs(ghost.slots) do
@@ -3226,7 +3229,7 @@ function Cosmetics.After:_apply(ghost, pose, alpha)
 			slot.clone.Transparency = 1
 		end
 	end
-end
+end)
 
 function Cosmetics.After:Set(on)
 	self.On = on
@@ -3243,7 +3246,7 @@ function Cosmetics.After:Set(on)
 		local g = self:_makeGhost()
 		if g then g.model:Destroy() end
 	end
-	self._conn = RunService.Heartbeat:Connect(function()
+	self._conn = RunService.Heartbeat:Connect(LPH_NO_VIRTUALIZE(function()
 		if not self.On then return end
 		local ch = LocalPlayer.Character
 		local hum = ch and ch:FindFirstChildOfClass("Humanoid")
@@ -3276,7 +3279,7 @@ function Cosmetics.After:Set(on)
 				end
 			end
 		end
-	end)
+	end))
 end
 
 function Cosmetics:BuildTab(tab)
