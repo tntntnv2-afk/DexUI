@@ -1099,6 +1099,8 @@ function Library:CreateWindow(cfg)
 		self:GiveSignal(UserInputService.InputEnded:Connect(function(inp) if IsPressed(inp) then resizing = false end end))
 	end
 
+	function window:SetVisible(on) show(on and true or false) end
+	function Library:SetVisible(on) show(on and true or false) end
 	task.defer(function() show(visible) end)
 	table.insert(self.Windows, window)
 	return window
