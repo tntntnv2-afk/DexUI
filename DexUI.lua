@@ -579,7 +579,7 @@ function Library:CreateWindow(cfg)
 		size = UDim2.fromOffset(math.min(size.X.Offset, vp.X - 16), math.min(size.Y.Offset, vp.Y - 16))
 	end
 
-	local main = Create("Frame", { Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Size = size, Position = UDim2.new(0.5, 0, 0.5, 0), ClipsDescendants = true, ZIndex = 10, Parent = ScreenGui })
+	local main = Create("Frame", { Name = "Window", AnchorPoint = Vector2.new(0.5, 0.5), Size = size, Position = UDim2.new(0.5, 0, 0.5, 0), ClipsDescendants = true, ZIndex = 10, Visible = cfg.AutoShow ~= false, Parent = ScreenGui })
 	self:AddToRegistry(main, { BackgroundColor3 = "Background" })
 	Corner(main, 20)
 	local edge = Create("UIStroke", { Thickness = 1, Transparency = 0.3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border, Parent = main })
@@ -1924,7 +1924,7 @@ function Library._AttachKeyPicker(parentObj, parentFrame, idx, cfg)
 				local k = inp.KeyCode
 				local clear = k == Enum.KeyCode.Escape or k == Enum.KeyCode.Backspace or k == Enum.KeyCode.Delete
 				obj:SetValue(clear and "None" or k)
-			elseif inp.UserInputType == Enum.UserInputType.MouseButton2 or inp.UserInputType == Enum.UserInputType.MouseButton3 then
+			elseif inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.MouseButton2 or inp.UserInputType == Enum.UserInputType.MouseButton3 then
 				binding = false
 				obj:SetValue(inp.UserInputType)
 			end
@@ -2394,9 +2394,11 @@ do
 		input:ReleaseFocus()
 		Tween(veil, { BackgroundTransparency = 1 }, 0.12).Completed:Connect(function() if not open then veil.Visible = false end end)
 	end
-	function Library:TogglePalette() if open then self:_PaletteClose() else self:_PaletteOpen() end end
+	Library.PaletteDisabled = true
+	function Library:TogglePalette() if self.PaletteDisabled then return end if open then self:_PaletteClose() else self:_PaletteOpen() end end
 
 	local launcher = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(0, 0, 0, 30), AutomaticSize = Enum.AutomaticSize.X, Position = UDim2.new(0, 16, 1, -16), BackgroundTransparency = 0.06, AutoButtonColor = false, Text = "", ZIndex = 300, Parent = ScreenGui })
+	launcher.Visible = false
 	Library:AddToRegistry(launcher, { BackgroundColor3 = "Main" }); Corner(launcher, 9)
 	local lst = Create("UIStroke", { Thickness = 1, Transparency = 0.15, Parent = launcher }); Library:AddToRegistry(lst, { Color = "Outline" })
 	local ledge = Create("UIStroke", { Thickness = 1, Transparency = 0.6, Parent = launcher }); Library:AddToRegistry(ledge, { Color = "Accent" })
@@ -2411,6 +2413,7 @@ do
 	Hover(launcher, "Main", "ElementHover"); Ripple(launcher); Press(launcher, 0.96)
 	launcher.MouseButton1Click:Connect(function() Library:TogglePalette() end)
 	function Library:SetPaletteButtonVisible(on) launcher.Visible = on and true or false end
+	function Library:DisablePalette() self.PaletteDisabled = true launcher.Visible = false if open then self:_PaletteClose() end end
 
 	input:GetPropertyChangedSignal("Text"):Connect(function() if open then search(input.Text) end end)
 	veil.MouseButton1Click:Connect(function() Library:_PaletteClose() end)
