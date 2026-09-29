@@ -165,7 +165,7 @@ local function Chevron(parent, size, themeKey)
 	Library:AddToRegistry(b, { BackgroundColor3 = themeKey or "FontDim" })
 	return holder
 end
--- simple vector icons, drawn so they always render and always match the theme
+
 local IconParts = setmetatable({}, { __mode = "k" })
 local function SetIconKey(root, key)
 	local parts = IconParts[root]
@@ -285,7 +285,7 @@ local function Shadow(frame, spread)
 	return holder
 end
 local PopupLayer = Create("Frame", { Name = "Popups", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ZIndex = 500, Parent = ScreenGui })
--- dock a popup beside the window (right edge), level with its trigger, never over the content
+
 local function DockPopup(popup, trigger)
 	local win = nil
 	for _, w in ipairs(Library.Windows) do
@@ -308,7 +308,7 @@ local function DockPopup(popup, trigger)
 		y = trigger.AbsolutePosition.Y + trigger.AbsoluteSize.Y + 6
 	end
 	popup.Position = UDim2.fromOffset(math.floor(x), math.floor(y))
-	-- connector: a hairline from the trigger's edge to the popup
+
 	local con = popup:FindFirstChild("_connector") or Create("Frame", { Name = "_connector", Size = UDim2.fromOffset(12, 1), BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = popup.ZIndex, Parent = popup })
 	Library:AddToRegistry(con, { BackgroundColor3 = "Accent" })
 	local left = win and (x > win.AbsolutePosition.X)
@@ -600,21 +600,149 @@ function Library:CreateWindow(cfg)
 	end
 	window.Frame = main
 
-	-- one soft ember glow low in the window; unrotated so the rounded clip holds it
-	local ember = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.new(1.2, 0, 0.55, 0), Position = UDim2.new(0.5, 0, 1, 40), BackgroundTransparency = 0.93, BorderSizePixel = 0, ZIndex = 10, Parent = main })
-	Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = ember })
-	self:AddToRegistry(ember, { BackgroundColor3 = "Accent" })
-	Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.45, 0.55), NumberSequenceKeypoint.new(1, 0.15) }), Parent = ember })
-	task.spawn(LPH_NO_VIRTUALIZE(function()
-		local t = 0
-		while not Library.Unloaded and ember.Parent do
-			t = t + task.wait(0.05)
-			ember.BackgroundTransparency = 0.93 + 0.02 * math.sin(t * 0.7)
-			ember.Position = UDim2.new(0.5 + 0.03 * math.sin(t * 0.25), 0, 1, 40)
+	do
+		local layer = Create("Frame", { Name = "Aurora", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 10, Parent = main })
+		Create("UICorner", { CornerRadius = UDim.new(0, 14), Parent = layer })
+		local sheen = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.new(0.22, 0, 2.4, 0), Position = UDim2.new(-0.3, 0, 0.5, 0), Rotation = 18, BackgroundColor3 = Color3.new(1, 1, 1), BackgroundTransparency = 0.955, BorderSizePixel = 0, ZIndex = 10, Parent = layer })
+		Create("UIGradient", { Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.5, 0), NumberSequenceKeypoint.new(1, 1) }), Parent = sheen })
+		local NODES, LINK, MOUSE_LINK = 26, 120, 150
+		local field = Create("Frame", { Name = "Field", Size = UDim2.new(1, -166, 1, -104), Position = UDim2.new(0, 158, 0, 70), BackgroundTransparency = 1, ClipsDescendants = true, ZIndex = 10, Parent = layer })
+		local probe = Create("Frame", { Size = UDim2.fromOffset(100, 100), BackgroundTransparency = 1, ZIndex = 10, Parent = field })
+		local nodes, lines = {}, {}
+		for i = 1, NODES do
+			local f = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(3, 3), BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = 10, Parent = field })
+			Create("UICorner", { CornerRadius = UDim.new(1, 0), Parent = f })
+			self:AddToRegistry(f, { BackgroundColor3 = "Accent" })
+			local ang = math.random() * math.pi * 2
+			local spd = math.random(8, 18)
+			nodes[i] = { f = f, x = 0, y = 0, vx = math.cos(ang) * spd, vy = math.sin(ang) * spd, ph = math.random() * 6.28 }
 		end
-	end))
+		local function lineAt(i)
+			local l = lines[i]
+			if not l then
+				l = Create("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), BorderSizePixel = 0, ZIndex = 10, Parent = field })
+				lines[i] = l
+			end
+			return l
+		end
+		local function place(l, x1, y1, x2, y2, alpha, colour)
+			local dx, dy = x2 - x1, y2 - y1
+			l.Position = UDim2.fromOffset((x1 + x2) * 0.5, (y1 + y2) * 0.5)
+			l.Size = UDim2.fromOffset(math.sqrt(dx * dx + dy * dy), 1)
+			l.Rotation = math.deg(math.atan2(dy, dx))
+			l.BackgroundColor3 = colour
+			l.BackgroundTransparency = alpha
+			l.Visible = true
+		end
+		local cards = setmetatable({}, { __mode = "k" })
+		local function watch(d) if d:IsA("Frame") and d:GetAttribute("BaseAlpha") ~= nil then cards[d] = true end end
+		for _, d in ipairs(main:GetDescendants()) do watch(d) end
+		self:GiveSignal(main.DescendantAdded:Connect(watch))
+		local function shown(g)
+			while g and g ~= main do
+				if g:IsA("GuiObject") and not g.Visible then return false end
+				g = g.Parent
+			end
+			return g == main
+		end
+		local box, rects, rectsAt, placed = { 0, 0, 1, 1 }, {}, -1, false
+		local function covered(x, y)
+			if x < box[1] or y < box[2] or x > box[3] or y > box[4] then return true end
+			for _, r in ipairs(rects) do
+				if x >= r[1] and x <= r[3] and y >= r[2] and y <= r[4] then return true end
+			end
+			return false
+		end
+		local t, sweep = 0, 0
+		self:GiveSignal(RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function(dt)
+			if Library.Unloaded or not main.Visible then return end
+			t = t + dt
+			local sc = math.max(probe.AbsoluteSize.X / 100, 0.01)
+			local fo = field.AbsolutePosition
+			local fz = field.AbsoluteSize / sc
+			box[1], box[2], box[3], box[4] = 4, 4, fz.X - 4, fz.Y - 4
+			if box[3] <= box[1] or box[4] <= box[2] then return end
+			if not placed then
+				placed = true
+				for _, n in ipairs(nodes) do
+					n.x = box[1] + math.random() * (box[3] - box[1])
+					n.y = box[2] + math.random() * (box[4] - box[2])
+				end
+			end
+			if t - rectsAt > 0.2 then
+				rectsAt = t
+				rects = {}
+				for c in pairs(cards) do
+					if c.Parent and shown(c) then
+						local p0, z0 = (c.AbsolutePosition - fo) / sc, c.AbsoluteSize / sc
+						if z0.X > 0 and z0.Y > 0 then rects[#rects + 1] = { p0.X - 6, p0.Y - 6, p0.X + z0.X + 6, p0.Y + z0.Y + 6 } end
+					end
+				end
+			end
+			local m = UserInputService:GetMouseLocation()
+			if not ScreenGui.IgnoreGuiInset then m = m - game:GetService("GuiService"):GetGuiInset() end
+			m = (m - fo) / sc
+			local mouseIn = not covered(m.X, m.Y)
+			local accent = Library.Theme.Accent
+			for _, n in ipairs(nodes) do
+				if mouseIn then
+					local dx, dy = m.X - n.x, m.Y - n.y
+					local d = math.sqrt(dx * dx + dy * dy)
+					if d < MOUSE_LINK and d > 1 then
+						n.vx = n.vx + dx / d * 14 * dt
+						n.vy = n.vy + dy / d * 14 * dt
+					end
+				end
+				local sp = math.sqrt(n.vx * n.vx + n.vy * n.vy)
+				if sp > 22 then n.vx, n.vy = n.vx / sp * 22, n.vy / sp * 22 end
+				n.x = n.x + n.vx * dt
+				n.y = n.y + n.vy * dt
+				if n.x < box[1] then n.x, n.vx = box[1], math.abs(n.vx) elseif n.x > box[3] then n.x, n.vx = box[3], -math.abs(n.vx) end
+				if n.y < box[2] then n.y, n.vy = box[2], math.abs(n.vy) elseif n.y > box[4] then n.y, n.vy = box[4], -math.abs(n.vy) end
+				n.f.Position = UDim2.fromOffset(n.x, n.y)
+				n.hid = covered(n.x, n.y)
+				n.f.Visible = not n.hid
+				n.f.BackgroundTransparency = 0.25 + 0.3 * (0.5 + 0.5 * math.sin(t * 1.3 + n.ph))
+			end
+			local used = 0
+			for i = 1, NODES do
+				local a = nodes[i]
+				for j = i + 1, NODES do
+					local b = nodes[j]
+					local dx, dy = b.x - a.x, b.y - a.y
+					local d2 = dx * dx + dy * dy
+					if d2 < LINK * LINK and not a.hid and not b.hid
+						and not covered(a.x + dx * 0.25, a.y + dy * 0.25)
+						and not covered(a.x + dx * 0.5, a.y + dy * 0.5)
+						and not covered(a.x + dx * 0.75, a.y + dy * 0.75) then
+						used = used + 1
+						place(lineAt(used), a.x, a.y, b.x, b.y, 0.72 + 0.28 * (math.sqrt(d2) / LINK), accent)
+					end
+				end
+				if mouseIn and not a.hid then
+					local dx, dy = m.X - a.x, m.Y - a.y
+					local d = math.sqrt(dx * dx + dy * dy)
+					if d < MOUSE_LINK and not covered(a.x + dx * 0.5, a.y + dy * 0.5) then
+						used = used + 1
+						place(lineAt(used), a.x, a.y, m.X, m.Y, 0.55 + 0.45 * (d / MOUSE_LINK), Color3.new(1, 1, 1))
+					end
+				end
+			end
+			for i = used + 1, #lines do lines[i].Visible = false end
+			sweep = sweep + dt
+			local cycle = 5
+			local u = (sweep % cycle) / cycle
+			if u < 0.36 then
+				local e = u / 0.36
+				e = e * e * (3 - 2 * e)
+				sheen.Position = UDim2.new(-0.3 + 1.6 * e, 0, 0.5, 0)
+				sheen.Visible = true
+			else
+				sheen.Visible = false
+			end
+		end)))
+	end
 
-	-- ------------------------------------------------------------ rail (the original look, 5 tabs visible, little arrows)
 	local RAIL, HEAD, FOOT = 150, 58, 28
 	local TAB_H, TAB_PAD, VISIBLE_TABS = 32, 2, 5
 	local LIST_H = TAB_H * VISIBLE_TABS + TAB_PAD * (VISIBLE_TABS - 1)
@@ -722,7 +850,6 @@ function Library:CreateWindow(cfg)
 		if y0 < cy then scrollTo(y0) elseif y0 + btn.AbsoluteSize.Y > cy + vh then scrollTo(y0 + btn.AbsoluteSize.Y - vh) end
 	end
 
-	-- rebindable menu key chip
 	local hintBtn = Create("TextButton", { AnchorPoint = Vector2.new(0, 1), Size = UDim2.new(1, -36, 0, 26), Position = UDim2.new(0, 24, 1, -14), Text = "", AutoButtonColor = false, Active = true, ZIndex = 30, Parent = rail })
 	Corner(hintBtn, 8); self:AddToRegistry(hintBtn, { BackgroundColor3 = "Element" }); Stroke(hintBtn, "Outline")
 	local hint = Text(hintBtn, "", 10, true, "FontDim"); hint.TextXAlignment = Enum.TextXAlignment.Center; hint.Size = UDim2.new(1, 0, 1, 0); hint.ZIndex = 31
@@ -759,14 +886,49 @@ function Library:CreateWindow(cfg)
 		end
 	end))
 
-	-- ------------------------------------------------------------ header
 	local head = Create("Frame", { Size = UDim2.new(1, -RAIL, 0, HEAD), Position = UDim2.new(0, RAIL, 0, 0), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
 	Draggable(head, main)
 	local pageTitle = Text(head, "", 17, true); pageTitle.Position = UDim2.new(0, 20, 0, 18); pageTitle.Size = UDim2.new(0.5, -20, 0, 22); pageTitle.ZIndex = 13
+	pageTitle.Visible = false
+	do
+		local strip = Create("Frame", { Size = UDim2.new(1, -300, 0, 26), Position = UDim2.new(0, 20, 0, 16), BackgroundTransparency = 1, ZIndex = 13, Parent = head })
+		Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder, Parent = strip })
+		local function stat(n, unit)
+			local seg = Create("Frame", { Size = UDim2.new(0, 0, 1, 0), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, LayoutOrder = n, ZIndex = 14, Parent = strip })
+			Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = seg })
+			local v = Text(seg, "", 12, true)
+			v.AutomaticSize = Enum.AutomaticSize.X v.Size = UDim2.new(0, 0, 1, 0) v.LayoutOrder = 1 v.ZIndex = 15
+			if unit then
+				local u = Text(seg, unit, 12, false, "FontDim")
+				u.AutomaticSize = Enum.AutomaticSize.X u.Size = UDim2.new(0, 0, 1, 0) u.LayoutOrder = 2 u.ZIndex = 15
+			end
+			local sep = Create("Frame", { Size = UDim2.fromOffset(1, 12), BackgroundTransparency = 0.5, BorderSizePixel = 0, LayoutOrder = n + 0.5, ZIndex = 14, Parent = strip })
+			Library:AddToRegistry(sep, { BackgroundColor3 = "Outline" })
+			return v
+		end
+		local fpsV, msV, tV, locV = stat(1, "FPS"), stat(2, "MS"), stat(3), stat(4)
+		local av = Create("ImageLabel", { Size = UDim2.fromOffset(22, 22), BackgroundTransparency = 1, LayoutOrder = 6, ZIndex = 14, Parent = strip, Image = "rbxthumb://type=AvatarHeadShot&id=" .. LocalPlayer.UserId .. "&w=150&h=150" })
+		Corner(av, 11)
+		local t0, frames, acc = os.clock(), 0, 0
+		self:GiveSignal(RunService.RenderStepped:Connect(function(dt)
+			frames, acc = frames + 1, acc + dt
+			if acc < 0.5 then return end
+			fpsV.Text = tostring(math.floor(frames / acc + 0.5))
+			frames, acc = 0, 0
+			local ping = 0
+			pcall(function() ping = LocalPlayer:GetNetworkPing() * 1000 end)
+			msV.Text = tostring(math.floor(ping + 0.5))
+			local sec = math.floor(os.clock() - t0)
+			tV.Text = string.format("%02d:%02d:%02d", sec // 3600, (sec % 3600) // 60, sec % 60)
+		end))
+		task.spawn(function()
+			local ok, cc = pcall(function() return game:GetService("LocalizationService"):GetCountryRegionForPlayerAsync(LocalPlayer) end)
+			locV.Text = ok and cc or "--"
+		end)
+	end
 	local baseLine = Create("Frame", { Size = UDim2.new(1, -40, 0, 1), Position = UDim2.new(0, 20, 0, HEAD - 1), BackgroundTransparency = 0.6, BorderSizePixel = 0, ZIndex = 12, Parent = head })
 	self:AddToRegistry(baseLine, { BackgroundColor3 = "Outline" })
 
-	-- close
 	local closeBtn = Create("TextButton", { Size = UDim2.fromOffset(26, 26), Position = UDim2.new(1, -46, 0, 16), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 14, Parent = head })
 	Corner(closeBtn, 9)
 	do
@@ -778,7 +940,6 @@ function Library:CreateWindow(cfg)
 	end
 	closeBtn.MouseButton1Click:Connect(function() Library:Confirm("unload " .. (cfg.Title or "the menu") .. "?", "this closes the menu for this session. you'll need to run the script again.", function() Library:Unload() end) end)
 
-	-- search
 	local searchBox = Create("Frame", { Size = UDim2.new(0, 180, 0, 28), Position = UDim2.new(1, -240, 0, 15), BackgroundTransparency = 1, ZIndex = 13, Parent = head })
 	Corner(searchBox, 10)
 	local searchEdge = Stroke(searchBox, "Outline")
@@ -822,11 +983,10 @@ function Library:CreateWindow(cfg)
 		task.delay(0.25, function() if searchIn.Text == "" then results.Visible = false end end)
 	end)
 
-	-- ------------------------------------------------------------ body + footer
-	local body = Create("Frame", { Size = UDim2.new(1, -RAIL, 1, -(HEAD + FOOT + 6)), Position = UDim2.new(0, RAIL, 0, HEAD + 6), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
+	local body = Create("Frame", { Name = "Body", Size = UDim2.new(1, -RAIL, 1, -(HEAD + FOOT + 6)), Position = UDim2.new(0, RAIL, 0, HEAD + 6), BackgroundTransparency = 1, ZIndex = 11, Parent = main })
 	local footer = Create("Frame", { Size = UDim2.new(1, -RAIL, 0, FOOT), Position = UDim2.new(0, RAIL, 1, -FOOT), BackgroundTransparency = 1, ZIndex = 12, Parent = main })
 	local footL = Text(footer, cfg.Footer or "", 10, false, "FontDim"); footL.Position = UDim2.new(0, 20, 0, -2); footL.Size = UDim2.new(0.45, -20, 1, 0); footL.ZIndex = 13
-	-- live readout with a tiny fps sparkline
+
 	local spark = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(52, 12), Position = UDim2.new(1, -24, 0.5, -2), BackgroundTransparency = 1, ZIndex = 13, Parent = footer })
 	local bars = {}
 	for i = 1, 13 do
@@ -856,7 +1016,6 @@ function Library:CreateWindow(cfg)
 		end
 	end)
 
-	-- ------------------------------------------------------------ visibility
 	local visible = cfg.AutoShow ~= false
 	local winScale = Create("UIScale", { Scale = 1, Parent = main })
 	local function show(on)
@@ -888,10 +1047,9 @@ function Library:CreateWindow(cfg)
 		Draggable(mob, mob)
 	end
 
-	-- ------------------------------------------------------------ tabs
 	local order = 0
 	local function columns(parent, top)
-		-- the well: a slightly lifted panel the cards sit inside, with even gutters
+
 		local well = Create("Frame", { Name = "Well", Size = UDim2.new(1, -40, 1, -(top + 8)), Position = UDim2.new(0, 20, 0, top), BackgroundTransparency = 1, ZIndex = 11, ClipsDescendants = true, Parent = parent })
 		local scroller = Create("ScrollingFrame", { Name = "Scroll", Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 2, ScrollBarImageTransparency = 0.75, ScrollingDirection = Enum.ScrollingDirection.Y, ScrollingEnabled = true, Active = true, ClipsDescendants = true, AutomaticCanvasSize = Enum.AutomaticSize.Y, CanvasSize = UDim2.new(), ZIndex = 12, Parent = well })
 		Library:AddToRegistry(scroller, { ScrollBarImageColor3 = "FontDim" })
@@ -1031,7 +1189,6 @@ function Library:CreateWindow(cfg)
 		return tab
 	end
 
-	-- ------------------------------------------------------------ cards
 	local gbOrder = 0
 	function window:_MakeGroupbox(column, name, path, tabRef, subRef)
 		gbOrder = gbOrder + 1
@@ -1041,7 +1198,7 @@ function Library:CreateWindow(cfg)
 		Library:AddToRegistry(card, { BackgroundColor3 = "Main" }); Corner(card, 12)
 		local cs = Create("UIStroke", { Thickness = 1, Transparency = 0.25, Parent = card })
 		Library:AddToRegistry(cs, { Color = "Outline" })
-		-- light-catching top edge
+
 		local lightEdge = Create("UIStroke", { Thickness = 1, Transparency = 0.7, Parent = card })
 		Library:AddToRegistry(lightEdge, { Color = "Accent" })
 		Create("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.18, 1), NumberSequenceKeypoint.new(1, 1) }), Parent = lightEdge })
@@ -1076,7 +1233,6 @@ function Library:CreateWindow(cfg)
 		return gb
 	end
 
-	-- resize grip
 	do
 		local grip = Create("TextButton", { AnchorPoint = Vector2.new(1, 1), Size = UDim2.fromOffset(18, 18), Position = UDim2.new(1, -6, 1, -6), Text = "", AutoButtonColor = false, BackgroundTransparency = 1, ZIndex = 25, Parent = main })
 		for i = 1, 3 do
@@ -1106,13 +1262,11 @@ function Library:CreateWindow(cfg)
 	return window
 end
 
-
 local GroupboxMethods = {}
 Library.GroupboxMethods = GroupboxMethods
 
 local ROW_H, LINE_H, CTRL_H = 28, 16, 30
 
--- tooltip: appears above the cursor after a short hover, styled like a popup
 local TipFrame = Create("Frame", { Size = UDim2.new(0, 0, 0, 26), AutomaticSize = Enum.AutomaticSize.X, Visible = false, ZIndex = 900, Parent = PopupLayer })
 Library:AddToRegistry(TipFrame, { BackgroundColor3 = "Main" }); Corner(TipFrame, 7)
 local tipStroke = Create("UIStroke", { Thickness = 1, Transparency = 0.2, Parent = TipFrame }); Library:AddToRegistry(tipStroke, { Color = "Outline" })
@@ -1418,7 +1572,7 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	local cur = Text(btn, "", 11, true)
 	cur.AnchorPoint = Vector2.new(1, 0); cur.TextXAlignment = Enum.TextXAlignment.Right
 	cur.Position = UDim2.new(1, -26, 0, 0); cur.Size = UDim2.new(0.5, -30, 1, 0); cur.ZIndex = 6
-	-- count pill for multi-selects
+
 	local pill = Create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Size = UDim2.fromOffset(18, 16), Position = UDim2.new(1, -26, 0.5, 0), Visible = false, ZIndex = 6, Parent = btn })
 	Corner(pill, 8); Library:AddToRegistry(pill, { BackgroundColor3 = "Accent" })
 	local pillT = Text(pill, "", 10, true); pillT.TextXAlignment = Enum.TextXAlignment.Center; pillT.Size = UDim2.new(1, 0, 1, 0); pillT.ZIndex = 7
@@ -1429,7 +1583,6 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	Shadow(list, 12)
 	Library.OpenPopups[list] = list
 
-	-- header: what you're picking, and how
 	local head = Create("Frame", { Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = -3, ZIndex = 61, Parent = listBody })
 	local ht = Text(head, title, 12, true); ht.Position = UDim2.new(0, 4, 0, 0); ht.Size = UDim2.new(1, -90, 1, 0); ht.ZIndex = 62
 	local hint = Text(head, cfg.Multi and "pick any" or "pick one", 10, false, "FontDim"); hint.AnchorPoint = Vector2.new(1, 0); hint.TextXAlignment = Enum.TextXAlignment.Right
@@ -1452,7 +1605,6 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 	Library:AddToRegistry(scroll, { ScrollBarImageColor3 = "Accent" })
 	Create("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = scroll })
 
-	-- footer (multi only): how many are picked, and quick all / clear
 	local foot, footCount, allBtn, clearBtn
 	do
 		foot = Create("Frame", { Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, LayoutOrder = 3, ZIndex = 61, Parent = listBody })
@@ -1531,7 +1683,7 @@ function GroupboxMethods:AddDropdown(idx, cfg)
 				local ib = Create("TextButton", { Size = UDim2.new(1, 0, 0, 26), Text = "", AutoButtonColor = false, BackgroundTransparency = selected and 0.86 or 1, LayoutOrder = i, ZIndex = 62, Parent = scroll })
 				Corner(ib, 7)
 				Library:AddToRegistry(ib, { BackgroundColor3 = selected and "Accent" or "ElementHover" })
-				-- indicator: a checkbox for multi, a radio for single
+
 				local ind = Create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(14, 14), Position = UDim2.new(0, 8, 0.5, 0), BackgroundTransparency = selected and 0 or 1, ZIndex = 63, Parent = ib })
 				Library:AddToRegistry(ind, { BackgroundColor3 = "Accent" })
 				Corner(ind, 4)
@@ -1959,6 +2111,12 @@ function GroupboxMethods:AddKeyPicker(idx, cfg)
 	return obj
 end
 
+function GroupboxMethods:AddCustom(height)
+	local f = row(self, height or 120, true)
+	f.ClipsDescendants = true
+	return f
+end
+
 function GroupboxMethods:AddESPPreview(cfg)
 	cfg = cfg or {}
 	local tabsCfg = cfg.Tabs or { "Enemy", "Team" }
@@ -1966,12 +2124,10 @@ function GroupboxMethods:AddESPPreview(cfg)
 	local userId = tonumber(cfg.UserId) or 5508585538
 	local f = row(self, CANVAS_H + 26, true)
 
-	-- segmented tabs
 	local tabBar = Create("Frame", { Size = UDim2.new(0, 0, 0, 20), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1, ZIndex = 5, Parent = f })
 	Corner(tabBar, 7); Stroke(tabBar, "Outline"); Pad(tabBar, 2, 2, 2, 2)
 	Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder, Parent = tabBar })
 
-	-- canvas
 	local canvas = Create("Frame", { Size = UDim2.new(1, 0, 0, CANVAS_H), Position = UDim2.new(0, 0, 0, 26), ClipsDescendants = true, ZIndex = 5, Parent = f })
 	Library:AddToRegistry(canvas, { BackgroundColor3 = "Well" }); Corner(canvas, 10); Stroke(canvas, "Outline")
 	do
@@ -1986,7 +2142,6 @@ function GroupboxMethods:AddESPPreview(cfg)
 		end
 	end
 
-	-- 3D model
 	local glowVp = Create("ViewportFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Ambient = Color3.fromRGB(255, 255, 255), LightColor = Color3.fromRGB(255, 255, 255), ZIndex = 6, Parent = canvas })
 	local glowWm = Create("WorldModel", { Parent = glowVp })
 	local glowCam = Create("Camera", { FieldOfView = 34, Parent = glowVp })
@@ -2075,7 +2230,6 @@ function GroupboxMethods:AddESPPreview(cfg)
 	end
 	loadUser(userId)
 
-	-- drag to rotate, wheel / buttons to zoom
 	local dragging, lastX = false, 0
 	local sink = Create("ScrollingFrame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, BorderSizePixel = 0, ScrollBarThickness = 0, ScrollingEnabled = true, ElasticBehavior = Enum.ElasticBehavior.Never, CanvasSize = UDim2.new(0, 0, 3, 0), CanvasPosition = Vector2.new(0, 1), Active = true, ZIndex = 8, Parent = canvas })
 	sink.InputBegan:Connect(function(inp)
@@ -2124,7 +2278,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 
 	for i, name in ipairs(tabsCfg) do
 		local page = Create("Frame", { Size = UDim2.new(1, 0, 1, 0), BackgroundTransparency = 1, Visible = false, ZIndex = 9, Parent = canvas })
-		-- the veil card, verbatim: Code font, hard black stroke, name / "[dist] hp/max" / 60x3 bar, stacked above the head
+
 		local card = Create("Frame", { AnchorPoint = Vector2.new(0.5, 1), Size = UDim2.fromOffset(160, 36), BackgroundTransparency = 1, ZIndex = 9, Parent = page })
 		local nameL = Create("TextLabel", { Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, Font = Enum.Font.Code, TextSize = 13, TextColor3 = Color3.fromRGB(255, 255, 255), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, Text = "player", ZIndex = 10, Parent = card })
 		local subL = Create("TextLabel", { Size = UDim2.new(1, 0, 0, 12), Position = UDim2.new(0, 0, 0, 14), BackgroundTransparency = 1, Font = Enum.Font.Code, TextSize = 11, TextColor3 = Color3.fromRGB(220, 220, 220), TextStrokeColor3 = Color3.fromRGB(0, 0, 0), TextStrokeTransparency = 0, Text = "[42] 180/250", ZIndex = 10, Parent = card })
@@ -2141,7 +2295,7 @@ function GroupboxMethods:AddESPPreview(cfg)
 			local bottom = project(boxCf.Position - Vector3.new(0, ext.Y * 0.5, 0))
 			if not top then return end
 			card.Position = UDim2.fromOffset(math.floor(top.X + 0.5), math.floor(top.Y + 0.5))
-			-- pack the card like veil does: whichever rows are on stack from the bottom up
+
 			local y = 36
 			local rows = {}
 			if self._show.HealthBg then rows[#rows + 1] = { barBg, 3 } end
@@ -2222,7 +2376,6 @@ function GroupboxMethods:AddESPPreview(cfg)
 		for _, t in ipairs(preview.Tabs) do if t.Page.Visible then t:_layout() end end
 	end)))
 
-	-- pop-out
 	local popBtn = Create("TextButton", { Size = UDim2.fromOffset(22, 22), Position = UDim2.new(1, -30, 0, 8), Text = "", AutoButtonColor = false, BackgroundTransparency = 0.4, ZIndex = 13, Parent = canvas })
 	Corner(popBtn, 7); Library:AddToRegistry(popBtn, { BackgroundColor3 = "Main" }); Stroke(popBtn, "Outline")
 	do
