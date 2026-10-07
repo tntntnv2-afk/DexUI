@@ -23,6 +23,7 @@ local Library = {
 	OpenPopups = {},
 	Unloaded = false,
 	IsMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled,
+	LowPower = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled,
 	Theme = {
 		Background = Color3.fromRGB(0, 0, 0),
 		Well = Color3.fromRGB(0, 0, 0),
@@ -395,7 +396,7 @@ function Library:_SetBackdrop(on)
 		BackdropGlow.Visible = self.Effects.Dim and true or false
 		Tween(Backdrop, { BackgroundTransparency = dim }, 0.25)
 		if self.Effects.Blur then Blur.Enabled = true Tween(Blur, { Size = self.Effects.BlurSize }, 0.25) end
-		if self.Effects.Snow then startSnow() end
+		if self.Effects.Snow and not self.LowPower then startSnow() end
 	else
 		Tween(Backdrop, { BackgroundTransparency = 1 }, 0.2).Completed:Connect(function()
 			if Backdrop.BackgroundTransparency >= 0.99 then Backdrop.Visible = false end
@@ -405,6 +406,11 @@ function Library:_SetBackdrop(on)
 	end
 end
 function Library:SetEffects(cfg) for k, v in pairs(cfg) do self.Effects[k] = v end end
+function Library:SetLowPower(on)
+	self.LowPower = on and true or false
+	if self.LowPower then stopSnow() elseif self.Effects.Snow and Backdrop.Visible then startSnow() end
+	for _, w in ipairs(self.Windows) do if w.SetLowPower then pcall(w.SetLowPower, w, self.LowPower) end end
+end
 
 local NotifHolder = Create("Frame", { Name = "Notifications", BackgroundTransparency = 1, Size = UDim2.new(0, 280, 1, -20), Position = UDim2.new(1, -292, 0, 12), Parent = ScreenGui })
 Create("UIListLayout", { HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder, Parent = NotifHolder })
@@ -593,8 +599,12 @@ function Library:CreateWindow(cfg)
 			NumberSequenceKeypoint.new(1, 1) }), Parent = flow })
 		task.spawn(LPH_NO_VIRTUALIZE(function()
 			while not Library.Unloaded and g.Parent do
-				g.Rotation = (g.Rotation + 1.4) % 360
-				task.wait(0.03)
+				if Library.LowPower then
+					task.wait(0.5)
+				else
+					g.Rotation = (g.Rotation + 1.4) % 360
+					task.wait(0.03)
+				end
 			end
 		end))
 	end
@@ -654,8 +664,13 @@ function Library:CreateWindow(cfg)
 			return false
 		end
 		local t, sweep = 0, 0
+		window._aurora = layer
+		function window:SetLowPower(on)
+			layer.Visible = not on
+		end
+		layer.Visible = not Library.LowPower
 		self:GiveSignal(RunService.RenderStepped:Connect(LPH_NO_VIRTUALIZE(function(dt)
-			if Library.Unloaded or not main.Visible then return end
+			if Library.Unloaded or not main.Visible or Library.LowPower then return end
 			t = t + dt
 			local sc = math.max(probe.AbsoluteSize.X / 100, 0.01)
 			local fo = field.AbsolutePosition
@@ -912,7 +927,7 @@ function Library:CreateWindow(cfg)
 		local t0, frames, acc = os.clock(), 0, 0
 		self:GiveSignal(RunService.RenderStepped:Connect(function(dt)
 			frames, acc = frames + 1, acc + dt
-			if acc < 0.5 then return end
+			if acc < (Library.LowPower and 1 or 0.5) then return end
 			fpsV.Text = tostring(math.floor(frames / acc + 0.5))
 			frames, acc = 0, 0
 			local ping = 0
