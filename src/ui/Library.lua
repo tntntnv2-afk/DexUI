@@ -4827,7 +4827,11 @@ function Library:CreateWindow(info)
 
 	applyLayout()
 	self.Window = Window
-	Window:Toggle(true)
+	if info.AutoShow == false or Library:GetSilentLoad() then
+		Library.PopupLayer.Visible = false
+	else
+		Window:Toggle(true)
+	end
 	return Window
 end
 
@@ -5091,6 +5095,30 @@ function Library:GetAutoload()
 	return nil
 end
 
+function Library:SetSilentLoad(enabled)
+	self.SilentLoad = enabled == true
+	if not hasFileApi() then
+		return
+	end
+	pcall(function()
+		ensureFolder(self.Folder)
+		writefile(self.Folder .. "/silent_load.txt", self.SilentLoad and "1" or "0")
+	end)
+end
+
+function Library:GetSilentLoad()
+	if hasFileApi() then
+		local path = self.Folder .. "/silent_load.txt"
+		local ok, data = pcall(function()
+			return isfile(path) and readfile(path) or nil
+		end)
+		if ok and data then
+			return data == "1"
+		end
+	end
+	return self.SilentLoad == true
+end
+
 function Library:LoadAutoload()
 	local name = self:GetAutoload()
 	if not name then
@@ -5134,6 +5162,17 @@ function Library:BuildSettingsTab(window, name, section)
 			Library:SetWatermark(enabled)
 		end,
 	})
+	if hasFileApi() then
+		Menu:AddToggle("SilentLoad", {
+			Text = "Silent load",
+			Description = "Start with the menu hidden",
+			Default = self:GetSilentLoad(),
+			Save = false,
+			Callback = function(enabled)
+				Library:SetSilentLoad(enabled)
+			end,
+		})
+	end
 	Menu:AddDropdown("UIScale", {
 		Text = "UI scale",
 		Values = { "75%", "90%", "100%", "110%", "125%" },

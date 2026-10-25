@@ -79,6 +79,7 @@ Library:LoadAutoload()
 - `Badge`: small tag under your name in the user card, like `"Premium"`. Without it the card shows `@username`. `User = false` hides the card.
 - `Footer` and `FooterRight`: left and right footer text. FPS and ping are always shown on the right.
 - `Width`, `Height` (default 780 x 520), `ToggleKey`.
+- `AutoShow = false` starts with the menu hidden. Players can also turn on **Silent load** in Settings → Menu; it's saved in `<folder>/silent_load.txt` and works the same way (`Library:SetSilentLoad`, `Library:GetSilentLoad`).
 
 Below 600 px wide the sidebar shrinks to icons only.
 
