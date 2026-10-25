@@ -52,6 +52,7 @@ local UnloadCallbacks = {}
 local SearchIndex = {}
 local Loops = {}
 local PopupScales = {}
+local ScaleHooks = {}
 
 local FAMILY = "rbxasset://fonts/families/BuilderSans.json"
 local FONT = Font.new(FAMILY, Enum.FontWeight.Medium)
@@ -81,6 +82,7 @@ local FADE_PROPS = {
 	{ "TextBox", "TextTransparency" },
 	{ "ImageLabel", "ImageTransparency" },
 	{ "ImageButton", "ImageTransparency" },
+	{ "ViewportFrame", "ImageTransparency" },
 	{ "ScrollingFrame", "ScrollBarImageTransparency" },
 	{ "UIStroke", "Transparency" },
 }
@@ -791,6 +793,9 @@ function Library:SetScale(scale)
 	end
 	for _, popupScale in ipairs(PopupScales) do
 		popupScale.Scale = scale
+	end
+	for _, hook in ipairs(ScaleHooks) do
+		hook(scale)
 	end
 end
 
@@ -3702,6 +3707,776 @@ local function headerButton(parent, iconName, position)
 		danger = state
 		paint()
 	end
+end
+
+local TARGET_STATES = {
+	fighting = { "Fighting" },
+	attacking = { "Attacking" },
+	dodging = { "Dodging", Color3.fromHex("ffb648") },
+	looting = { "Looting", Color3.fromHex("4ade80") },
+	finishing = { "Finishing", Color3.fromHex("4ade80") },
+	gripping = { "Gripping", Color3.fromHex("4ade80") },
+	retreating = { "Retreating", Color3.fromHex("ff5c7a") },
+	healing = { "Healing", Color3.fromHex("4ade80") },
+	resetting = { "Resetting", Color3.fromHex("ffb648") },
+	waiting = { "Waiting" },
+	defeated = { "Defeated", Color3.fromHex("4ade80") },
+}
+local COPY_STRIP = { "LuaSourceContainer", "Sound", "ParticleEmitter", "Beam", "Trail", "Light", "Fire", "Smoke",
+	"Sparkles", "LayerCollector", "ProximityPrompt", "ClickDetector", "Animator", "JointInstance", "Constraint",
+	"BodyMover", "Explosion", "ForceField" }
+
+local function commas(n)
+	local value = tostring(math.floor(n + 0.5))
+	local count
+	repeat
+		value, count = value:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+	until count == 0
+	return value
+end
+
+local function shortNumber(n)
+	n = math.abs(n)
+	if n >= 1e9 then
+		return string.format("%.1fB", n / 1e9)
+	elseif n >= 1e6 then
+		return string.format("%.1fM", n / 1e6)
+	elseif n >= 1e4 then
+		return string.format("%.1fK", n / 1e3)
+	end
+	return commas(n)
+end
+
+local function clockText(seconds)
+	seconds = math.max(0, math.floor(seconds + 0.5))
+	if seconds >= 3600 then
+		return string.format("%d:%02d:%02d", seconds // 3600, (seconds % 3600) // 60, seconds % 60)
+	end
+	return string.format("%d:%02d", seconds // 60, seconds % 60)
+end
+
+function Library:CreateTargetCard(opts)
+	opts = opts or {}
+	assert(self.ScreenGui, "create the window before the target card")
+	local card = {
+		Enabled = opts.Enabled ~= false,
+		Kills = 0,
+		Target = nil,
+		AutoHide = opts.AutoHide ~= false,
+		Scale = opts.Scale or 1,
+		ShowDistance = opts.ShowDistance ~= false,
+	}
+	local WIDTH = opts.Width or 330
+	local PORTRAIT = 66
+
+	local Card = create("Frame", {
+		Name = "DexoriTargetCard",
+		AnchorPoint = Vector2.new(0.5, 0),
+		Position = UDim2.new(0.5, 0, 0, 58),
+		Size = UDim2.fromOffset(WIDTH, 132),
+		Visible = false,
+		Theme = { BackgroundColor3 = "Panel" },
+		Parent = self.ScreenGui,
+	}, { corner(12), stroke("Border") })
+	local CardScale = create("UIScale", { Scale = card.Scale * self.UserScale, Parent = Card })
+	table.insert(ScaleHooks, function(scale)
+		CardScale.Scale = card.Scale * scale
+	end)
+
+	local Portrait = create("Frame", {
+		Position = UDim2.fromOffset(12, 12),
+		Size = UDim2.fromOffset(PORTRAIT, PORTRAIT),
+		ClipsDescendants = true,
+		Theme = { BackgroundColor3 = "Field" },
+		Parent = Card,
+	}, { corner(10), stroke("Border") })
+	create("UIGradient", {
+		Rotation = 90,
+		Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.new(0.55, 0.55, 0.6)),
+		Parent = Portrait,
+	})
+	local PortraitIcon = icon(Portrait, opts.Icon or "skull", 26, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Theme = { ImageColor3 = "Muted" },
+	})
+	local View = create("ViewportFrame", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 1,
+		Ambient = Color3.fromRGB(165, 160, 175),
+		LightColor = Color3.fromRGB(255, 245, 240),
+		LightDirection = Vector3.new(0.45, -0.7, 1),
+		Parent = Portrait,
+	}, { corner(10) })
+	local Camera = create("Camera", { FieldOfView = 34, Parent = View })
+	View.CurrentCamera = Camera
+	local Badge = create("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromOffset(12 + PORTRAIT / 2, 12 + PORTRAIT),
+		Size = UDim2.fromOffset(0, 16),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Visible = false,
+		ZIndex = 5,
+		Theme = { BackgroundColor3 = "Accent" },
+		Parent = Card,
+	}, { corner(5), padding(0, 6, 0, 6) })
+	local BadgeText = text({
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 16),
+		FontFace = FONT_BOLD,
+		TextSize = 10,
+		ZIndex = 6,
+		KeepCase = true,
+		TextColor3 = Color3.new(1, 1, 1),
+		Theme = false,
+		Parent = Badge,
+	})
+
+	local Info = create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(PORTRAIT + 24, 11),
+		Size = UDim2.new(1, -(PORTRAIT + 36), 0, PORTRAIT + 2),
+		Parent = Card,
+	})
+	local NameText = text({
+		Size = UDim2.new(1, -90, 0, 18),
+		FontFace = FONT_BOLD,
+		TextSize = 15,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		KeepCase = true,
+		Parent = Info,
+	})
+	local Subtitle = text({
+		Position = UDim2.fromOffset(0, 19),
+		Size = UDim2.new(1, -90, 0, 14),
+		TextSize = 11,
+		TextTruncate = Enum.TextTruncate.AtEnd,
+		KeepCase = true,
+		Theme = { TextColor3 = "Muted" },
+		Parent = Info,
+	})
+	local StateChip = create("Frame", {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.fromScale(1, 0),
+		Size = UDim2.fromOffset(0, 20),
+		AutomaticSize = Enum.AutomaticSize.X,
+		BackgroundTransparency = 0.88,
+		BackgroundColor3 = self.Theme.Accent,
+		Parent = Info,
+	}, { corner(6), padding(0, 8, 0, 8) })
+	local StateText = text({
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 20),
+		FontFace = FONT_SEMI,
+		TextSize = 11,
+		KeepCase = true,
+		TextColor3 = self.Theme.Accent,
+		Theme = false,
+		Parent = StateChip,
+	})
+
+	local Bars = create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(0, 39),
+		Size = UDim2.new(1, 0, 0, 12),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = Info,
+	}, { list(4) })
+	local Track = create("Frame", {
+		Size = UDim2.new(1, 0, 0, 12),
+		LayoutOrder = 1,
+		ClipsDescendants = true,
+		Theme = { BackgroundColor3 = "Field" },
+		Parent = Bars,
+	}, { round(), stroke("Border") })
+	local Lag = create("Frame", {
+		Size = UDim2.fromScale(1, 1),
+		BackgroundTransparency = 0.5,
+		Theme = { BackgroundColor3 = "Text" },
+		Parent = Track,
+	}, { round() })
+	local Fill = create("Frame", {
+		Size = UDim2.fromScale(1, 1),
+		Theme = { BackgroundColor3 = "Accent" },
+		Parent = Track,
+	}, { round() })
+	local Gloss = create("Frame", {
+		Size = UDim2.new(1, 0, 0.5, 0),
+		BackgroundColor3 = Color3.new(1, 1, 1),
+		BackgroundTransparency = 0.86,
+		Parent = Fill,
+	}, { round() })
+	local HpText = text({
+		Position = UDim2.new(0, 0, 1, -14),
+		Size = UDim2.new(1, -60, 0, 14),
+		FontFace = FONT_SEMI,
+		TextSize = 12,
+		RichText = true,
+		KeepCase = true,
+		Theme = false,
+		Parent = Info,
+	})
+	local PctText = text({
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, 0, 1, -14),
+		Size = UDim2.fromOffset(60, 14),
+		FontFace = FONT_BOLD,
+		TextSize = 12,
+		TextXAlignment = Enum.TextXAlignment.Right,
+		KeepCase = true,
+		Theme = { TextColor3 = "SubText" },
+		Parent = Info,
+	})
+
+	local Rule = create("Frame", {
+		Position = UDim2.fromOffset(12, PORTRAIT + 24),
+		Size = UDim2.new(1, -24, 0, 1),
+		Theme = { BackgroundColor3 = "Border" },
+		Parent = Card,
+	})
+	local Stats = create("Frame", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(12, PORTRAIT + 25),
+		Size = UDim2.new(1, -24, 0, 30),
+		Parent = Card,
+	}, { list(0, true, { VerticalAlignment = Enum.VerticalAlignment.Center }) })
+	local function stat(order, iconName, tip)
+		local Cell = create("Frame", {
+			BackgroundTransparency = 1,
+			Size = UDim2.new(0.25, 0, 1, 0),
+			LayoutOrder = order,
+			Parent = Stats,
+		}, { list(5, true, { VerticalAlignment = Enum.VerticalAlignment.Center, HorizontalAlignment = order == 1 and Enum.HorizontalAlignment.Left or (order == 4 and Enum.HorizontalAlignment.Right or Enum.HorizontalAlignment.Center) }) })
+		icon(Cell, iconName, 12, { LayoutOrder = 1, Theme = { ImageColor3 = "Muted" } })
+		local Value = text({
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 14),
+			FontFace = FONT_SEMI,
+			TextSize = 12,
+			LayoutOrder = 2,
+			KeepCase = true,
+			Theme = { TextColor3 = "SubText" },
+			Parent = Cell,
+		})
+		attachTooltip(Cell, tip)
+		return Value
+	end
+	local TimeValue = stat(1, "clock", "Time on this target")
+	local DpsValue = stat(2, "zap", "Damage per second")
+	local EtaValue = stat(3, "hourglass", "Time left at this rate")
+	local KillValue = stat(4, "skull", "Kills this session")
+
+	local Pops = create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		ZIndex = 10,
+		Parent = Card,
+	})
+
+	local extra = {}
+	local function layout()
+		local barsHeight = 12
+		for _, bar in pairs(extra) do
+			if bar.Frame.Visible then
+				barsHeight = barsHeight + 4 + bar.Frame.Size.Y.Offset
+			end
+		end
+		local infoHeight = math.max(PORTRAIT + 2, 39 + barsHeight + 20)
+		Info.Size = UDim2.new(1, -(PORTRAIT + 36), 0, infoHeight)
+		Rule.Position = UDim2.fromOffset(12, infoHeight + 22)
+		Stats.Position = UDim2.fromOffset(12, infoHeight + 23)
+		Card.Size = UDim2.fromOffset(WIDTH, infoHeight + 23 + 30 + 4)
+	end
+	layout()
+
+	function card:AddBar(name, barOpts)
+		barOpts = barOpts or {}
+		local Frame = create("Frame", {
+			Size = UDim2.new(1, 0, 0, barOpts.Height or 5),
+			LayoutOrder = 10 + #Bars:GetChildren(),
+			ClipsDescendants = true,
+			Visible = barOpts.Visible ~= false,
+			Theme = { BackgroundColor3 = "Field" },
+			Parent = Bars,
+		}, { round() })
+		local BarFill = create("Frame", {
+			Size = UDim2.fromScale(barOpts.Value or 0, 1),
+			BackgroundColor3 = barOpts.Color or Library.Theme.SubText,
+			Parent = Frame,
+		}, { round() })
+		local bar = { Frame = Frame, Fill = BarFill }
+		function bar:Set(value, max)
+			local ratio = max and max > 0 and value / max or value
+			tween(BarFill, { Size = UDim2.fromScale(math.clamp(ratio or 0, 0, 1), 1) }, TWEEN)
+		end
+		function bar:SetVisible(state)
+			Frame.Visible = state == true
+			layout()
+		end
+		function bar:SetColor(color)
+			BarFill.BackgroundColor3 = color
+		end
+		extra[name] = bar
+		layout()
+		return bar
+	end
+	function card:GetBar(name)
+		return extra[name]
+	end
+
+	local copy, source, sourceRoot, partPairs, head, focus = nil, nil, nil, {}, nil, nil
+	local function clearCopy()
+		if copy then
+			copy:Destroy()
+		end
+		copy, source, sourceRoot, partPairs, head, focus = nil, nil, nil, {}, nil, nil
+		PortraitIcon.Visible = true
+	end
+	local function buildCopy(model, root)
+		clearCopy()
+		source, sourceRoot = model, root
+		if not (model and root) or opts.Portrait == false then
+			return
+		end
+		local flipped = {}
+		for _, object in ipairs(model:GetDescendants()) do
+			if not object.Archivable then
+				object.Archivable = true
+				table.insert(flipped, object)
+			end
+		end
+		local wasArchivable = model.Archivable
+		model.Archivable = true
+		local ok, clone = pcall(model.Clone, model)
+		model.Archivable = wasArchivable
+		for _, object in ipairs(flipped) do
+			object.Archivable = false
+		end
+		if not (ok and clone) then
+			return
+		end
+		local sourceParts, cloneParts = {}, {}
+		for _, object in ipairs(model:GetDescendants()) do
+			if object:IsA("BasePart") then
+				table.insert(sourceParts, object)
+			end
+		end
+		for _, object in ipairs(clone:GetDescendants()) do
+			if object:IsA("BasePart") then
+				table.insert(cloneParts, object)
+			end
+		end
+		for index, part in ipairs(sourceParts) do
+			local twin = cloneParts[index]
+			if twin and twin.Name == part.Name then
+				twin.Anchored = true
+				twin.CanCollide = false
+				table.insert(partPairs, { part, twin })
+			end
+		end
+		for _, object in ipairs(clone:GetDescendants()) do
+			for _, className in ipairs(COPY_STRIP) do
+				if object:IsA(className) then
+					object:Destroy()
+					break
+				end
+			end
+		end
+		local humanoid = clone:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+			humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff
+		end
+		local headPart = model:FindFirstChild("Head", true)
+		head = (headPart and headPart:IsA("BasePart")) and headPart or nil
+		copy = clone
+		copy.Parent = View
+		PortraitIcon.Visible = false
+	end
+	local function pose()
+		if not (copy and sourceRoot and sourceRoot.Parent) then
+			return
+		end
+		local base = sourceRoot.CFrame
+		for _, pair in ipairs(partPairs) do
+			local original, twin = pair[1], pair[2]
+			if original.Parent then
+				twin.CFrame = base:ToObjectSpace(original.CFrame)
+				twin.Transparency = original.Transparency
+			end
+		end
+		local target, size
+		if head and head.Parent then
+			target, size = base:ToObjectSpace(head.CFrame).Position, head.Size.Magnitude
+		else
+			local ok, boxCFrame, boxSize = pcall(source.GetBoundingBox, source)
+			if not ok then
+				return
+			end
+			target = base:ToObjectSpace(boxCFrame).Position + Vector3.new(0, boxSize.Y * 0.4, 0)
+			size = math.max(boxSize.X, boxSize.Z) * 0.45
+		end
+		focus = focus and focus:Lerp(target, 0.25) or target
+		local distance = size * 1.25 / math.tan(math.rad(Camera.FieldOfView / 2))
+		Camera.CFrame = CFrame.lookAt(focus + Vector3.new(0, size * 0.12, -distance), focus)
+	end
+
+	local shown = false
+	local function setShown(state)
+		if state == shown then
+			return
+		end
+		shown = state
+		if state then
+			CardScale.Scale = card.Scale * Library.UserScale * 0.94
+			tween(CardScale, { Scale = card.Scale * Library.UserScale }, POP_IN)
+		end
+		popout(Card, state)
+	end
+
+	local stateKey, stateColor
+	local function paintState(label, color)
+		local T = Library.Theme
+		local chip = color or T.Accent
+		StateText.Text = label or ""
+		StateText.TextColor3 = chip
+		StateChip.BackgroundColor3 = chip
+		StateChip.Visible = label ~= nil and label ~= ""
+	end
+	function card:SetState(value, color)
+		stateKey, stateColor = value, color
+		local known = type(value) == "string" and TARGET_STATES[string.lower(value)]
+		if known then
+			paintState(known[1], color or known[2])
+		else
+			paintState(value and tostring(value) or nil, color)
+		end
+	end
+
+	local health, maxHealth, shownHealth = 0, 1, 0
+	local ratioNow, lagRatio, lastDrop = 1, 1, 0
+	local engagedAt, samples, lastSample = os.clock(), {}, 0
+	local pendingDamage, pendingSince = 0, 0
+	local defeatedAt = nil
+	local defeatedModel = nil
+	local lastKillTime = nil
+
+	local function damagePop(amount)
+		local s = math.max(CardScale.Scale, 0.01)
+		local left = (Track.AbsolutePosition.X - Card.AbsolutePosition.X) / s
+		local top = (Track.AbsolutePosition.Y - Card.AbsolutePosition.Y) / s
+		local x = left + Track.AbsoluteSize.X / s * math.clamp(ratioNow, 0.08, 0.92)
+		local Pop = text({
+			AnchorPoint = Vector2.new(0.5, 1),
+			Position = UDim2.fromOffset(x, top - 2),
+			Size = UDim2.fromOffset(80, 16),
+			FontFace = FONT_BOLD,
+			TextSize = 13,
+			TextXAlignment = Enum.TextXAlignment.Center,
+			Text = "-" .. shortNumber(amount),
+			KeepCase = true,
+			ZIndex = 11,
+			Theme = { TextColor3 = "Accent" },
+			Parent = Pops,
+		})
+		local PopScale = create("UIScale", { Scale = 0.6, Parent = Pop })
+		tween(PopScale, { Scale = 1 }, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out))
+		tween(Pop, { Position = Pop.Position - UDim2.fromOffset(0, 18) }, TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out))
+		task.delay(0.35, function()
+			tween(Pop, { TextTransparency = 1 }, TweenInfo.new(0.45)).Completed:Connect(function()
+				Pop:Destroy()
+			end)
+		end)
+	end
+
+	local function resetStats()
+		engagedAt, samples, lastSample = os.clock(), {}, 0
+		pendingDamage, pendingSince = 0, 0
+		lagRatio, defeatedAt = 1, nil
+		shownHealth = health
+	end
+
+	local function readTarget(target)
+		local humanoid = target.Humanoid
+		if humanoid then
+			if humanoid.Parent then
+				health = math.max(humanoid.Health, 0)
+				maxHealth = math.max(humanoid.MaxHealth, 1)
+			else
+				health = 0
+			end
+		end
+		if target.Model and not target.Model.Parent then
+			health = 0
+		end
+	end
+
+	function card:SetTarget(target)
+		if typeof(target) == "Instance" then
+			local model = target:IsA("Model") and target or target:FindFirstAncestorOfClass("Model")
+			target = { Model = model }
+		end
+		if target == nil then
+			self.Target = nil
+			clearCopy()
+			if self.AutoHide then
+				setShown(false)
+			end
+			return
+		end
+		local model = target.Model
+		if model and model == defeatedModel and not self.Target then
+			local humanoid = target.Humanoid or model:FindFirstChildOfClass("Humanoid")
+			if not model.Parent or not humanoid or humanoid.Health <= 0 then
+				return
+			end
+		end
+		target.Humanoid = target.Humanoid or (model and model:FindFirstChildOfClass("Humanoid"))
+		target.Root = target.Root or (model and (model:FindFirstChild("HumanoidRootPart") or model.PrimaryPart))
+		target.Name = target.Name or (model and model.Name) or "Target"
+		local same = self.Target and model ~= nil and self.Target.Model == model
+		self.Target = target
+		if target.Health then
+			health = target.Health
+		end
+		if target.MaxHealth then
+			maxHealth = math.max(target.MaxHealth, 1)
+		end
+		readTarget(target)
+		if not same then
+			buildCopy(model, target.Root)
+			resetStats()
+			ratioNow = health / maxHealth
+			lagRatio = ratioNow
+			if stateKey == "defeated" or stateKey == "Defeated" then
+				self:SetState(nil)
+			end
+		end
+		NameText.Text = target.Name
+		Badge.Visible = target.Badge ~= nil
+		BadgeText.Text = target.Badge and string.upper(tostring(target.Badge)) or ""
+		PortraitIcon.Visible = copy == nil
+		if target.Icon then
+			Library:SetIcon(PortraitIcon, target.Icon)
+		end
+		if self.Enabled then
+			setShown(true)
+		end
+		if not same then
+			shownHealth = health
+			self._step(0)
+		end
+	end
+
+	function card:SetHealth(value, max)
+		health = math.max(tonumber(value) or 0, 0)
+		if max then
+			maxHealth = math.max(tonumber(max) or 1, 1)
+		end
+	end
+
+	function card:SetEnabled(state)
+		self.Enabled = state ~= false
+		setShown(self.Enabled and self.Target ~= nil)
+	end
+
+	function card:SetScale(scale)
+		self.Scale = tonumber(scale) or 1
+		CardScale.Scale = self.Scale * Library.UserScale
+	end
+
+	function card:ResetPosition()
+		card.Dragged = false
+	end
+
+	function card:ResetKills()
+		self.Kills = 0
+		KillValue.Text = "0"
+	end
+
+	function card:Destroy()
+		clearCopy()
+		Card:Destroy()
+	end
+
+	local dragging, dragStart, startPos
+	Card.InputBegan:Connect(function(input)
+		if isPointer(input) then
+			dragging, dragStart, startPos = true, input.Position, Card.Position
+		end
+	end)
+	connect(UserInputService.InputChanged, function(input)
+		if dragging and isMove(input) then
+			local delta = input.Position - dragStart
+			Card.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+			card.Dragged = true
+		end
+	end)
+	connect(UserInputService.InputEnded, function(input)
+		if isPointer(input) then
+			dragging = false
+		end
+	end)
+
+	local pulse = 0
+	local function step(dt)
+		local target = card.Target
+		if not target or not Card.Visible then
+			return
+		end
+		dt = math.min(dt or 0, 0.1)
+		readTarget(target)
+		pose()
+		local now = os.clock()
+		local T = Library.Theme
+
+		if not card.Dragged then
+			local watermark = Library.Watermark
+			local y = 12
+			if watermark and watermark.Visible then
+				y = watermark.Position.Y.Offset + watermark.AbsoluteSize.Y + 8
+			end
+			Card.Position = UDim2.new(0.5, 0, 0, y)
+		end
+
+		local ratio = math.clamp(health / maxHealth, 0, 1)
+		if ratio < ratioNow - 0.0005 then
+			lastDrop = now
+			pendingDamage = pendingDamage + (ratioNow - ratio) * maxHealth
+			if pendingSince == 0 then
+				pendingSince = now
+			end
+		end
+		if ratio > lagRatio then
+			lagRatio = ratio
+		end
+		ratioNow = ratioNow + (ratio - ratioNow) * (1 - math.exp(-dt * 16))
+		if math.abs(ratioNow - ratio) < 0.0005 then
+			ratioNow = ratio
+		end
+		if now - lastDrop > 0.35 then
+			lagRatio = math.max(ratioNow, lagRatio - dt * 0.7)
+		end
+		if pendingDamage > 0 and now - pendingSince > 0.14 then
+			if opts.DamageNumbers ~= false then
+				damagePop(pendingDamage)
+			end
+			pendingDamage, pendingSince = 0, 0
+		end
+		Fill.Size = UDim2.fromScale(ratioNow, 1)
+		Lag.Size = UDim2.fromScale(lagRatio, 1)
+		if ratio <= 0.2 and ratio > 0 then
+			pulse = pulse + dt * 6
+			Gloss.BackgroundTransparency = 0.86 - 0.12 * (0.5 + 0.5 * math.sin(pulse))
+		else
+			Gloss.BackgroundTransparency = 0.86
+		end
+
+		shownHealth = shownHealth + (health - shownHealth) * (1 - math.exp(-dt * 12))
+		if math.abs(shownHealth - health) < 1 then
+			shownHealth = health
+		end
+		HpText.Text = string.format('<font color="#%s">%s</font><font color="#%s"> / %s</font>', T.Text:ToHex(), commas(math.ceil(shownHealth)), T.Muted:ToHex(), commas(math.floor(maxHealth)))
+		PctText.Text = string.format("%d%%", math.floor(ratio * 100 + 0.5))
+
+		local subtitle = target.Subtitle or ""
+		if card.ShowDistance and target.Root and target.Root.Parent then
+			local character = LocalPlayer.Character
+			local mine = character and character:FindFirstChild("HumanoidRootPart")
+			if mine then
+				local studs = math.floor((mine.Position - target.Root.Position).Magnitude + 0.5)
+				subtitle = subtitle ~= "" and (subtitle .. " · " .. studs .. " studs") or (studs .. " studs")
+			end
+		end
+		Subtitle.Text = subtitle
+
+		if health <= 0 and not defeatedAt then
+			defeatedAt = now
+			defeatedModel = target.Model
+			card.Kills = card.Kills + 1
+			lastKillTime = now - engagedAt
+			card:SetState("defeated")
+			fire(opts.OnDefeated, target, lastKillTime)
+		elseif health > 0 and defeatedAt then
+			defeatedAt = nil
+			card:SetState(nil)
+		end
+		if defeatedAt and card.AutoHide and now - defeatedAt > (opts.HideDelay or 1.6) then
+			card.Target = nil
+			clearCopy()
+			setShown(false)
+		end
+
+		if now - lastSample >= 0.2 and not defeatedAt then
+			lastSample = now
+			table.insert(samples, { t = now, hp = health })
+			while #samples > 2 and now - samples[1].t > 6 do
+				table.remove(samples, 1)
+			end
+		end
+		local dps
+		local first = samples[1]
+		if first and now - first.t >= 1 then
+			local lost = first.hp - health
+			dps = lost > 0 and lost / (now - first.t) or 0
+		end
+		TimeValue.Text = defeatedAt and clockText(lastKillTime or 0) or clockText(now - engagedAt)
+		DpsValue.Text = dps and (shortNumber(dps) .. "/s") or "--"
+		EtaValue.Text = defeatedAt and "done" or ((dps and dps > 0) and ("~" .. clockText(health / dps)) or "--")
+		KillValue.Text = tostring(card.Kills)
+	end
+	connect(RunService.RenderStepped, step)
+	card._step = step
+
+	table.insert(ThemeCallbacks, function()
+		card:SetState(stateKey, stateColor)
+	end)
+	card:SetState(opts.State)
+	KillValue.Text = "0"
+	TimeValue.Text = "0:00"
+	DpsValue.Text = "--"
+	EtaValue.Text = "--"
+	function card:AddSettings(group, prefix)
+		prefix = prefix or "TargetCard"
+		group:AddToggle(prefix, {
+			Text = opts.Title or "Target card",
+			Description = "Shows the mob or boss you're fighting",
+			Default = card.Enabled,
+			Callback = function(enabled)
+				card:SetEnabled(enabled)
+			end,
+		})
+		group:AddToggle(prefix .. "Damage", {
+			Text = "Damage numbers",
+			Default = opts.DamageNumbers ~= false,
+			Callback = function(enabled)
+				opts.DamageNumbers = enabled
+			end,
+		})
+		group:AddSlider(prefix .. "Scale", {
+			Text = "Card scale",
+			Min = 50,
+			Max = 200,
+			Default = math.floor(card.Scale * 100 + 0.5),
+			Suffix = "%",
+			Callback = function(value)
+				card:SetScale(value / 100)
+			end,
+		})
+		group:AddButton({
+			Label = "Card position",
+			Text = "Reset",
+			Func = function()
+				card:ResetPosition()
+			end,
+		})
+	end
+
+	self.TargetCard = card
+	table.insert(UnloadCallbacks, function()
+		clearCopy()
+	end)
+	return card
 end
 
 function Library:CreateWindow(info)

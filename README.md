@@ -111,6 +111,28 @@ Some handy names: `house`, `sprout`, `swords`, `sword`, `crosshair`, `map-pin`, 
 - `Library:SaveConfig(name)`, `LoadConfig`, `DeleteConfig`, `ListConfigs`, `SetAutoload`, `LoadAutoload`
 - `Library:OnUnload(fn)` and `Library:Unload()`
 
+## Target card
+
+A floating card for the mob or boss you're fighting: a live 3D portrait, a health bar with a white "damage taken" chunk that drains after each hit, floating damage numbers, a state chip, distance, time on target, DPS, time left and session kills. It sits under the watermark until it's dragged, fades in when you set a target and fades out shortly after the target dies.
+
+```lua
+local Card = Library:CreateTargetCard()
+Card:AddSettings(SomeGroupbox)
+
+Card:SetTarget(bossModel)
+Card:SetTarget({ Model = bossModel, Name = "Akaza", Subtitle = "Upper Moon 3", Badge = "Boss" })
+Card:SetState("Fighting")
+Card:SetTarget(nil)
+```
+
+- `SetTarget` takes a model (it finds the Humanoid and root itself) or a table with `Model`, `Humanoid`, `Root`, `Name`, `Subtitle`, `Badge`, `Icon`. Call it every frame if you like; the same model doesn't reset the stats, and a boss that already died isn't counted twice.
+- No Humanoid? Pass `Health` and `MaxHealth` and update with `Card:SetHealth(hp, max)`.
+- `SetState` knows `Fighting`, `Attacking`, `Dodging`, `Looting`, `Finishing`, `Gripping`, `Retreating`, `Healing`, `Resetting`, `Waiting` and `Defeated`, each with its own colour, or any text with an optional colour.
+- `Card:AddBar("Shield", { Color = Color3.fromRGB(96, 165, 250) })` adds a thin bar under the health bar; `GetBar(name):Set(value, max)`, `:SetVisible()`, `:SetColor()`.
+- `AddSettings(groupbox)` adds the show toggle, damage numbers toggle, scale slider and a reset position button.
+- Options: `CreateTargetCard({ Width = 330, Scale = 1, AutoHide = true, HideDelay = 1.6, ShowDistance = true, DamageNumbers = true, Portrait = true, Icon = "skull", OnDefeated = function(target, seconds) end })`.
+- `Card.Kills`, `Card:ResetKills()`, `Card:SetEnabled()`, `Card:SetScale()`, `Card:ResetPosition()`, `Card:Destroy()`.
+
 ## Layout
 
 ```

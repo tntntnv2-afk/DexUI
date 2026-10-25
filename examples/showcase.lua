@@ -7,6 +7,7 @@ end
 Env.DexoriShowcase = Library
 
 local Options = Library.Options
+local LocalPlayer = game:GetService("Players").LocalPlayer
 Library:SetFolder("Dexori/showcase")
 
 local Window = Library:CreateWindow({
@@ -57,6 +58,42 @@ end })
 local Targets = Tabs.Farm:AddRightGroupbox("Targets")
 Targets:AddDropdown("FarmTargets", { Text = "Mobs", Values = { "Bandit", "Wolf", "Demon", "Boss" }, Multi = true, Default = { "Bandit", "Demon" } })
 Targets:AddToggle("FarmBosses", { Text = "Bosses first", Description = "Skips mobs while a boss is up" })
+
+local TargetCard = Library:CreateTargetCard()
+local Fight = Tabs.Farm:AddLeftGroupbox("Target card")
+TargetCard:AddSettings(Fight)
+local fighting = 0
+Fight:AddButton({ Label = "Training boss", Description = "Fake fight to try the card", Text = "Fight", Func = function()
+	fighting = fighting + 1
+	local id = fighting
+	local hp, max = 50000, 50000
+	local shield = TargetCard:GetBar("Shield") or TargetCard:AddBar("Shield", { Color = Color3.fromRGB(96, 165, 250), Height = 4 })
+	shield:SetVisible(true)
+	shield:Set(1)
+	TargetCard:SetTarget({ Name = "Akaza", Subtitle = "Upper Moon 3", Badge = "Boss", Icon = "flame", Health = hp, MaxHealth = max })
+	TargetCard:SetState("Fighting")
+	task.spawn(function()
+		while id == fighting and hp > 0 and not Library.Unloaded do
+			task.wait(0.35)
+			hp = math.max(0, hp - math.random(900, 2600))
+			TargetCard:SetHealth(hp, max)
+			shield:Set(math.max(0, hp / max - 0.5) * 2)
+			if math.random() < 0.08 then
+				TargetCard:SetState("Dodging")
+				task.wait(0.6)
+				TargetCard:SetState("Fighting")
+			end
+		end
+		shield:SetVisible(false)
+	end)
+end })
+Fight:AddButton({ Label = "Your character", Text = "Track", Func = function()
+	fighting = fighting + 1
+	if LocalPlayer.Character then
+		TargetCard:SetTarget(LocalPlayer.Character)
+		TargetCard:SetState("Waiting")
+	end
+end })
 
 local Toggles = Tabs.Controls:AddLeftGroupbox("Toggles")
 Toggles:AddToggle("DemoEnabled", { Text = "Enabled", Default = true })
