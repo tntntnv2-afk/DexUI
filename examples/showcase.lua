@@ -11,16 +11,52 @@ Library:SetFolder("Dexori/showcase")
 
 local Window = Library:CreateWindow({
 	Title = "Dexori",
-	Subtitle = "UI showcase",
-	Footer = "Dexori UI v" .. Library.Version,
+	Footer = "Dexori Hub",
+	FooterRight = "made by Dexori  |  build " .. Library.Version,
+	Badge = "Premium",
 	ToggleKey = "RightControl",
 })
 
+Window:AddSection("Main")
 local Tabs = {
-	Controls = Window:AddTab("Controls"),
-	Inputs = Window:AddTab("Inputs"),
-	Visuals = Window:AddTab("Visuals"),
+	Home = Window:AddTab("Home", "house"),
+	Farm = Window:AddTab("Auto Farm", "sprout"),
+	Controls = Window:AddTab("Controls", "sliders-horizontal"),
+	Inputs = Window:AddTab("Inputs", "keyboard"),
+	Visuals = Window:AddTab("Visuals", "eye"),
 }
+
+local Welcome = Tabs.Home:AddLeftGroupbox("Welcome")
+Welcome:AddLabel("Every Dexori element is on these pages. Press Right Control to hide or show the menu.")
+Welcome:AddButton({ Label = "Say hi", Description = "Sends a notification", Text = "Notify", Func = function()
+	Library:Notify("Dexori", "Hi!", 3)
+end })
+local Status = Tabs.Home:AddRightGroupbox("Status")
+local StatusStats = Status:AddStats({ { Label = "Session", Value = "00:00:00" }, { Label = "Options", Value = "0", Accent = true }, { Label = "Tabs", Value = "7" } })
+
+local Farming = Tabs.Farm:AddLeftGroupbox("Farming")
+Farming:AddToggle("FarmEnabled", { Text = "Auto Farm", Description = "Farms the nearest mobs", Default = true }):AddKeybind("FarmKey", { Default = "F" })
+Farming:AddToggle("FarmCollect", { Text = "Auto Collect", Description = "Picks up drops", Default = true })
+Farming:AddToggle("FarmSkills", { Text = "Use Skills" })
+Farming:AddDropdown("FarmMethod", { Text = "Method", Values = { "Behind", "Above", "Below" }, Default = "Above" })
+Farming:AddSlider("FarmDistance", { Text = "Distance", Min = 2, Max = 20, Default = 8, Suffix = " studs" })
+Farming:AddButton({ Label = "Nearest mob", Text = "Teleport", Func = function()
+	Library:Notify("Dexori", "Teleported", 2)
+end })
+
+local Session = Tabs.Farm:AddRightGroupbox("Session")
+local SessionStats = Session:AddStats({ { Label = "Time", Value = "00:42:17" }, { Label = "Gold earned", Value = "12,480", Accent = true }, { Label = "Kills", Value = "312" } })
+local Level = Session:AddProgress({ Text = "Level 47", Value = 0.68 })
+Session:AddButton({ Text = "Reset session", Func = function()
+	SessionStats:Set("Time", "00:00:00")
+	SessionStats:Set("Gold earned", "0")
+	SessionStats:Set("Kills", "0")
+	Level:SetValue(0)
+end })
+
+local Targets = Tabs.Farm:AddRightGroupbox("Targets")
+Targets:AddDropdown("FarmTargets", { Text = "Mobs", Values = { "Bandit", "Wolf", "Demon", "Boss" }, Multi = true, Default = { "Bandit", "Demon" } })
+Targets:AddToggle("FarmBosses", { Text = "Bosses first", Description = "Skips mobs while a boss is up" })
 
 local Toggles = Tabs.Controls:AddLeftGroupbox("Toggles")
 Toggles:AddToggle("DemoEnabled", { Text = "Enabled", Default = true })
@@ -56,7 +92,7 @@ Buttons:AddButton({
 })
 Buttons:AddDivider("Labels")
 Buttons:AddLabel("Plain label")
-Buttons:AddLabel("<b>Bold</b>  <font color=\"#9b5cff\">Accent</font>  <i>Italic</i>")
+Buttons:AddLabel("<b>Bold</b>  <font color=\"#e21a22\">Accent</font>  <i>Italic</i>")
 
 local Sliders = Tabs.Controls:AddRightGroupbox("Sliders")
 Sliders:AddSlider("DemoVolume", { Text = "Volume", Min = 0, Max = 100, Default = 72, Suffix = "%" })
@@ -198,7 +234,7 @@ EspOptions:AddSlider("DemoEspHealth", {
 		editing():SetHealth(value / 100)
 	end,
 })
-EspOptions:AddInput("DemoEspName", {
+EspOptions:AddInput("DemoEspTag", {
 	Text = "Name tag",
 	Placeholder = "Player name",
 	Callback = function(value)
@@ -243,6 +279,23 @@ StripText.TextColor3 = Color3.new(1, 1, 1)
 StripText.Text = "Custom row"
 StripText.Parent = Strip
 
+Window:AddSection("Other")
 Library:BuildSettingsTab(Window)
+local Credits = Window:AddTab("Credits", "star"):AddLeftGroupbox("Credits")
+Credits:AddLabel("Dexori UI. Icons by Lucide (ISC licence).")
+
+local started = os.clock()
+task.spawn(function()
+	while not Library.Unloaded do
+		local t = math.floor(os.clock() - started)
+		local count = 0
+		for _ in pairs(Options) do
+			count = count + 1
+		end
+		StatusStats:Set("Session", string.format("%02d:%02d:%02d", t // 3600, t // 60 % 60, t % 60))
+		StatusStats:Set("Options", tostring(count))
+		task.wait(1)
+	end
+end)
 
 Library:Notify("Dexori", "Loaded. Right Control toggles the menu.", 5)

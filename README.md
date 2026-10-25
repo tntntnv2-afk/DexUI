@@ -1,6 +1,6 @@
 # Dexori UI
 
-A Roblox UI library, built on the Kompile UI v5 base: windows with tabs and groupboxes, toggles with keybinds and colour pickers, sliders, dropdowns, inputs, labels, dividers, an ESP preview, notifications, a keybind list, a watermark, themes, UI scale, and saved configs with autoload.
+A Roblox UI library, built on the Kompile UI v5 base: a window with a sidebar of icon tabs, a header with the page title, game and search, card groupboxes, toggles with keybinds and colour pickers, sliders, dropdowns, inputs, labels, dividers, an ESP preview, notifications, a keybind list, a watermark, themes, UI scale, and saved configs with autoload.
 
 ## Load
 
@@ -43,26 +43,67 @@ python tools/make_sheet.py logo.gif assets/logo_anim.png --height 64 --bg 12,12,
 
 It prints the `DefineAsset` line to paste. `--bg` turns a solid background colour transparent. `--crop x0,y0,x1,y1` trims the frames first. Sheets stay within 1024 x 1024 (Roblox's limit).
 
-Two names are special: `Wordmark` is the logo in the title bar and watermark, and `Icon` is the mobile toggle button. Both default to the animated Dexori D (`assets/dexori_d_anim.png`); define either again to swap it. If an image can't load, the logo falls back to the text "dexori".
+Two names are special: `Wordmark` is the logo in the watermark, and `Icon` is the mark at the top of the sidebar and the mobile toggle button. Both default to the animated Dexori D (`assets/dexori_d_anim.png`); define either again to swap it. If an image can't load, the logo falls back to the text "dexori".
 
 ## Quick start
 
 ```lua
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/tntntnv2-afk/DexUI/main/loader.lua"))()
 Library:SetFolder("Dexori/my-script")
-local Window = Library:CreateWindow({ Title = "Dexori", Subtitle = "My script", Footer = "Dexori", ToggleKey = "RightControl" })
-local Main = Window:AddTab("Main")
-local Box = Main:AddLeftGroupbox("Things")
-Box:AddToggle("MyToggle", { Text = "Do the thing", Default = false }):AddKeybind("MyToggleKey", { Default = "None" })
-Box:AddSlider("MySlider", { Text = "Amount", Min = 0, Max = 100, Default = 50, Rounding = 0 })
+local Window = Library:CreateWindow({
+	Title = "Dexori",
+	Footer = "Dexori Hub",
+	FooterRight = "made by me  |  build 1",
+	Badge = "Premium",
+	ToggleKey = "RightControl",
+})
+Window:AddSection("Main")
+local Farm = Window:AddTab("Auto Farm", "sprout")
+local Box = Farm:AddLeftGroupbox("Farming")
+Box:AddToggle("AutoFarm", { Text = "Auto Farm", Description = "Farms the nearest mobs" }):AddKeybind("AutoFarmKey", { Default = "None" })
+Box:AddSlider("Distance", { Text = "Distance", Min = 2, Max = 20, Default = 8, Suffix = " studs" })
+Box:AddButton({ Label = "Nearest mob", Text = "Teleport", Func = function() end })
+Window:AddSection("Other")
 Library:BuildSettingsTab(Window)
 Library:LoadAutoload()
 ```
 
 `examples/showcase.lua` has every element in one window.
 
+## Window
+
+`CreateWindow` options, all optional:
+
+- `Title`: name at the top of the sidebar. `Subtitle`: the line under it (default `v1.0 · Script Hub`).
+- `Game`: text in the pill next to the page title. Leave it out to show the current place's name, or `false` to hide the pill.
+- `Badge`: small tag under your name in the user card, like `"Premium"`. Without it the card shows `@username`. `User = false` hides the card.
+- `Footer` and `FooterRight`: left and right footer text. FPS and ping are always shown on the right.
+- `Width`, `Height` (default 780 x 520), `ToggleKey`.
+
+Below 600 px wide the sidebar shrinks to icons only.
+
+- `Window:AddSection("Main")`: a heading in the sidebar.
+- `Window:AddTab(name, icon)`: a sidebar tab. `icon` is a name from the icon list; `Tab:SetIcon`, `Tab:SetTitle`.
+- `Library:SetGame`, `SetFooter`, `SetFooterRight`, `SetSubtitle` change the header and footer later.
+- The minimize button hides the menu; the close button unloads it after a second click.
+
+## Icons
+
+`assets/icons.png` holds 139 [Lucide](https://lucide.dev) icons. Use any of them by name:
+
+```lua
+local glyph = Library:Icon(parent, "swords", 16, { Theme = { ImageColor3 = "Accent" } })
+Library:SetIcon(glyph, "skull")
+```
+
+Some handy names: `house`, `sprout`, `swords`, `sword`, `crosshair`, `map-pin`, `layout-grid`, `settings`, `star`, `eye`, `user`, `users`, `zap`, `shield`, `target`, `flame`, `skull`, `coins`, `trophy`, `gem`, `bell`, `palette`, `keyboard`, `bot`, `ghost`, `compass`, `globe`, `sparkles`, `crown`, `gamepad-2`. The full list is `ICON_NAMES` in `src/ui/Library.lua`; `assets/README.md` explains adding more.
+
 ## Building blocks
 
+- Toggles, sliders, dropdowns, inputs, keybinds and colour pickers take `Text` and an optional `Description` (grey line under the label).
+- `AddButton({ Text, Func })` is a full-width outlined button. Add `Label` (and `Description`) to get a row with the label on the left and the button on the right.
+- `AddStats({ { Label = "Time", Value = "00:00" }, { Label = "Gold", Value = "0", Accent = true } })` returns an object with `:Set(label, value)`.
+- `AddProgress({ Text = "Level 47", Value = 0.68 })` returns an object with `:SetValue(0..1)` and `:SetText()`.
 - `Library.Options[id]`: every toggle, slider, dropdown, input, keybind and colour picker by id (`.Value`, `:SetValue()`, `:OnChanged()`)
 - `Library:Notify(title, text, seconds)`
 - `Library:SetTheme({ ... })`
@@ -79,6 +120,7 @@ art/                  the original Dexori GIFs, not loaded at runtime
 examples/showcase.lua every element in one window
 examples/assets.lua   shows the Wordmark and Icon images to test the image pipeline
 tools/make_sheet.py   GIF or PNG frames -> sprite sheet
+tools/make_icons.js   Lucide icons -> assets/icons.png
 tools/check.py        compiles every Lua file and checks asset paths
 DexUI.lua             DexUI v2, kept for older scripts
 ```
