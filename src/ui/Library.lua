@@ -1394,15 +1394,63 @@ function Elements:_separator()
 	self.Rows = (self.Rows or 0) + 1
 end
 
-function Elements:_holder(height)
-	if self.Rows > 0 then
-		create("Frame", {
-			Size = UDim2.new(1, 0, 0, 1),
-			LayoutOrder = self:_next(),
-			Theme = { BackgroundColor3 = "Divider" },
-			Parent = self.Container,
-		})
+local function relayoutRows(container)
+	local items = {}
+	for index, child in ipairs(container:GetChildren()) do
+		if child:IsA("GuiObject") then
+			table.insert(items, { child, index })
+		end
 	end
+	table.sort(items, function(a, b)
+		if a[1].LayoutOrder ~= b[1].LayoutOrder then
+			return a[1].LayoutOrder < b[1].LayoutOrder
+		end
+		return a[2] < b[2]
+	end)
+	local open = false
+	for _, item in ipairs(items) do
+		local child = item[1]
+		local line = child:FindFirstChild("RowDivider")
+		if line then
+			line.Visible = open
+			if child.Visible then
+				open = true
+			end
+		elseif child.Visible then
+			open = child:GetAttribute("DexoriBreak") ~= true
+		end
+	end
+end
+
+local function watchRows(container)
+	local pending = false
+	local function schedule()
+		if pending then
+			return
+		end
+		pending = true
+		task.defer(function()
+			pending = false
+			if container.Parent then
+				relayoutRows(container)
+			end
+		end)
+	end
+	local function track(child)
+		if child:IsA("GuiObject") then
+			child:GetPropertyChangedSignal("Visible"):Connect(schedule)
+			child:GetPropertyChangedSignal("LayoutOrder"):Connect(schedule)
+		end
+		schedule()
+	end
+	for _, child in ipairs(container:GetChildren()) do
+		track(child)
+	end
+	container.ChildAdded:Connect(track)
+	container.ChildRemoved:Connect(schedule)
+end
+
+function Elements:_holder(height, plain)
 	self:_separator()
 	local Holder = create("Frame", {
 		BackgroundTransparency = 1,
@@ -1411,6 +1459,16 @@ function Elements:_holder(height)
 		LayoutOrder = self:_next(),
 		Parent = self.Container,
 	}, { padding(ROW_PAD, 0, ROW_PAD, 0) })
+	if not plain then
+		create("Frame", {
+			Name = "RowDivider",
+			Position = UDim2.fromOffset(0, -ROW_PAD),
+			Size = UDim2.new(1, 0, 0, 1),
+			Visible = false,
+			Theme = { BackgroundColor3 = "Divider" },
+			Parent = Holder,
+		})
+	end
 	return Holder
 end
 
@@ -1424,6 +1482,13 @@ end
 
 local function rowHeight(opts, minimum)
 	return math.max(described(opts) and 34 or 22, minimum or 0)
+end
+
+local function stacked(opts)
+	if opts.Stacked ~= nil then
+		return opts.Stacked == true
+	end
+	return type(opts.Text) == "string" and (utf8.len(opts.Text) or #opts.Text) > 15
 end
 
 local function rowText(parent, opts, fallback, widthScale, widthOffset)
@@ -1510,6 +1575,7 @@ function Elements:AddDivider(label)
 			LayoutOrder = self:_next(),
 			Parent = self.Container,
 		})
+		Holder:SetAttribute("DexoriBreak", true)
 		create("Frame", {
 			AnchorPoint = Vector2.new(0, 0.5),
 			Position = UDim2.new(0, 0, 0.5, 3),
@@ -1537,19 +1603,24 @@ function Elements:AddDivider(label)
 		self.Rows = 0
 		return
 	end
-	create("Frame", {
+	local Line = create("Frame", {
 		Size = UDim2.new(1, 0, 0, 1),
 		LayoutOrder = self:_next(),
 		Theme = { BackgroundColor3 = "BorderLight" },
 		Parent = self.Container,
 	})
+	Line:SetAttribute("DexoriBreak", true)
 	self.Rows = 0
 end
 
 function Elements:AddCustom(height)
 	local Holder = self:_holder(height or 120)
-	Holder.ClipsDescendants = true
-	return Holder
+	return create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
+		ClipsDescendants = true,
+		Parent = Holder,
+	})
 end
 
 function Elements:AddColorPicker(id, opts)
@@ -1934,12 +2005,11 @@ end
 function Elements:AddStats(stats)
 	stats = stats or {}
 	local Holder = self:_holder(54)
-	create("UIListLayout", {
-		FillDirection = Enum.FillDirection.Horizontal,
-		Padding = UDim.new(0, 8),
-		SortOrder = Enum.SortOrder.LayoutOrder,
+	local Strip = create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.fromScale(1, 1),
 		Parent = Holder,
-	})
+	}, { list(8, true) })
 	local count = math.max(#stats, 1)
 	local cells = {}
 	for index, stat in ipairs(stats) do
@@ -1947,7 +2017,7 @@ function Elements:AddStats(stats)
 			Size = UDim2.new(1 / count, -math.ceil(8 * (count - 1) / count), 1, 0),
 			LayoutOrder = index,
 			Theme = { BackgroundColor3 = "Field" },
-			Parent = Holder,
+			Parent = Strip,
 		}, { corner(8), stroke("Border"), padding(9, 9, 8, 9) })
 		text({
 			Size = UDim2.new(1, 0, 0, 12),
@@ -2072,22 +2142,32 @@ function Elements:AddDropdown(id, opts)
 	end
 
 	local Holder = self:_holder()
-	list(8).Parent = Holder
+	local Stack = create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = Holder,
+	}, { list(8) })
 
+	local tall = opts.Text ~= nil and stacked(opts)
 	local Top = create("Frame", {
 		BackgroundTransparency = 1,
-		Size = UDim2.new(1, 0, 0, rowHeight(opts, 30)),
+		Size = UDim2.new(1, 0, 0, tall and (rowHeight(opts) + 36) or rowHeight(opts, 30)),
 		LayoutOrder = 1,
-		Parent = Holder,
+		Parent = Stack,
 	})
 	if opts.Text then
-		rowText(Top, opts, nil, 0.5, 10)
+		local Label = rowText(Top, opts, nil, tall and 1 or 0.5, tall and 0 or 10)
+		if tall and not described(opts) then
+			Label.AnchorPoint = Vector2.zero
+			Label.Position = UDim2.fromOffset(0, 2)
+		end
 	end
 	local FieldEdge = stroke("Border")
 	local Field = create("TextButton", {
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.fromScale(1, 0.5),
-		Size = UDim2.new(opts.Text and 0.5 or 1, 0, 0, 30),
+		AnchorPoint = Vector2.new(1, tall and 1 or 0.5),
+		Position = UDim2.fromScale(1, tall and 1 or 0.5),
+		Size = UDim2.new((opts.Text and not tall) and 0.5 or 1, 0, 0, 30),
 		AutoButtonColor = false,
 		Text = "",
 		Theme = { BackgroundColor3 = "Field" },
@@ -2131,7 +2211,7 @@ function Elements:AddDropdown(id, opts)
 		Visible = false,
 		LayoutOrder = 2,
 		Theme = { BackgroundColor3 = "Background" },
-		Parent = Holder,
+		Parent = Stack,
 	}, { corner(10), stroke("BorderLight") })
 	local PopupPop = create("Frame", {
 		BackgroundTransparency = 1,
@@ -2531,15 +2611,20 @@ function Elements:AddInput(id, opts)
 	option.Value = tostring(opts.Default or "")
 
 	local titled = opts.Text ~= nil
-	local Holder = self:_holder(titled and rowHeight(opts, 30) or 30)
+	local tall = titled and stacked(opts)
+	local Holder = self:_holder(tall and (rowHeight(opts) + 36) or (titled and rowHeight(opts, 30) or 30))
 	if titled then
-		rowText(Holder, opts, nil, 0.5, 10)
+		local Label = rowText(Holder, opts, nil, tall and 1 or 0.5, tall and 0 or 10)
+		if tall and not described(opts) then
+			Label.AnchorPoint = Vector2.zero
+			Label.Position = UDim2.fromOffset(0, 2)
+		end
 	end
 	local Edge = stroke("Border")
 	local Frame = create("Frame", {
-		AnchorPoint = Vector2.new(1, 0.5),
-		Position = UDim2.fromScale(1, 0.5),
-		Size = UDim2.new(titled and 0.5 or 1, 0, 0, 30),
+		AnchorPoint = Vector2.new(1, tall and 1 or 0.5),
+		Position = UDim2.fromScale(1, tall and 1 or 0.5),
+		Size = UDim2.new((titled and not tall) and 0.5 or 1, 0, 0, 30),
 		Theme = { BackgroundColor3 = "Field" },
 		Parent = Holder,
 	}, { corner(7), Edge })
@@ -3271,6 +3356,7 @@ local function newGroupbox(tab, column, title)
 		LayoutOrder = 2,
 		Parent = Outer,
 	}, { list(0) })
+	watchRows(Content)
 
 	local group = setmetatable({ Container = Content, Order = 0, Rows = 0, Tab = tab, Column = column, Title = title or "", Frame = Outer }, Elements)
 	function group.Expand() end
@@ -4336,7 +4422,7 @@ function Library:CreateTargetCard(opts)
 			if watermark and watermark.Visible then
 				y = watermark.Position.Y.Offset + watermark.AbsoluteSize.Y + 8
 			end
-			Card.Position = UDim2.new(0.5, 0, 0, y)
+			Card.Position = UDim2.new(0.5, 0, 0, y + (card.Offset or 0))
 		end
 
 		local ratio = math.clamp(health / maxHealth, 0, 1)
@@ -6033,8 +6119,7 @@ function Library:BuildSettingsTab(window, name, section)
 	})
 	Configs:_index("Create config", NameRow, NameRow)
 
-	Configs.Rows = 0
-	local Head = Configs:_holder(18)
+	local Head = Configs:_holder(18, true)
 	local HeadText = text({
 		Size = UDim2.new(1, -30, 1, 0),
 		FontFace = FONT_BOLD,
@@ -6050,8 +6135,7 @@ function Library:BuildSettingsTab(window, name, section)
 		IconSize = 12,
 	})
 
-	Configs.Rows = 0
-	local ListHolder = Configs:_holder()
+	local ListHolder = Configs:_holder(nil, true)
 	local ListFrame = create("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 0),
