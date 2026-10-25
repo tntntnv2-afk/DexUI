@@ -5949,92 +5949,250 @@ function Library:BuildSettingsTab(window, name, section)
 		return Tab
 	end
 
-	local ConfigName = Configs:AddInput("ConfigName", { Text = "Config name", Placeholder = "my-config", Save = false })
-	local ConfigList = Configs:AddDropdown("ConfigList", {
-		Text = "Config list",
-		Values = self:ListConfigs(),
-		Placeholder = "None selected",
-		Save = false,
-	})
-	local AutoloadLabel = Configs:AddLabel("Current autoload config: " .. (self:GetAutoload() or "none"))
-
-	local function refresh()
-		ConfigList:SetValues(Library:ListConfigs())
-	end
-	local function picked()
-		if not ConfigList.Value then
-			Library:Notify("Dexori", "Pick a config from the list first.")
-			return nil
-		end
-		return ConfigList.Value
-	end
-
-	Configs:AddButton({
-		Text = "Create config",
-		Func = function()
-			if cleanName(ConfigName.Value) == "" then
-				return Library:Notify("Dexori", "Type a config name first.")
+	local function iconButton(parent, iconName, tip, props)
+		props = props or {}
+		local Edge = stroke("Border")
+		local Button = create("TextButton", {
+			AnchorPoint = props.AnchorPoint or Vector2.zero,
+			Position = props.Position or UDim2.new(),
+			Size = UDim2.fromOffset(props.Size or 26, props.Size or 26),
+			AutoButtonColor = false,
+			Text = "",
+			LayoutOrder = props.LayoutOrder or 0,
+			BackgroundTransparency = props.Filled and 0 or 1,
+			Theme = { BackgroundColor3 = props.Filled and "Field" or "Panel" },
+			Parent = parent,
+		}, { corner(7), Edge })
+		Edge.Enabled = props.Filled == true
+		pressScale(Button)
+		local Glyph = icon(Button, iconName, props.IconSize or 13, {
+			AnchorPoint = Vector2.new(0.5, 0.5),
+			Position = UDim2.fromScale(0.5, 0.5),
+		})
+		local state = { hot = false, lit = false, danger = false }
+		local function paint()
+			local T = Library.Theme
+			local color = (state.lit or state.danger) and T.Accent or (state.hot and T.Text or T.Muted)
+			tween(Glyph, { ImageColor3 = color })
+			if props.Filled then
+				tween(Edge, { Color = (state.danger or state.hot) and (state.danger and T.Accent or T.BorderLight) or T.Border })
+			else
+				tween(Button, { BackgroundTransparency = state.hot and 0 or 1, BackgroundColor3 = T.Hover })
 			end
-			local ok, result = Library:SaveConfig(ConfigName.Value)
-			if not ok then
-				return Library:Notify("Dexori", "Failed to create config: " .. tostring(result))
+		end
+		table.insert(ThemeCallbacks, paint)
+		paint()
+		Button.MouseEnter:Connect(function()
+			state.hot = true
+			paint()
+		end)
+		Button.MouseLeave:Connect(function()
+			state.hot = false
+			paint()
+		end)
+		attachTooltip(Button, tip)
+		return Button, function(key, value)
+			state[key] = value
+			paint()
+		end
+	end
+
+	local NameRow = Configs:_holder(30)
+	local NameEdge = stroke("Border")
+	local NameField = create("Frame", {
+		Size = UDim2.new(1, -38, 1, 0),
+		Theme = { BackgroundColor3 = "Field" },
+		Parent = NameRow,
+	}, { corner(7), NameEdge })
+	local NameBox = create("TextBox", {
+		BackgroundTransparency = 1,
+		Position = UDim2.fromOffset(10, 0),
+		Size = UDim2.new(1, -20, 1, 0),
+		Text = "",
+		PlaceholderText = "New config name",
+		ClearTextOnFocus = false,
+		ClipsDescendants = true,
+		FontFace = FONT,
+		TextSize = 13,
+		TextXAlignment = Enum.TextXAlignment.Left,
+		Theme = { TextColor3 = "Text", PlaceholderColor3 = "Muted" },
+		Parent = NameField,
+	})
+	NameBox.Focused:Connect(function()
+		tween(NameEdge, { Color = Library.Theme.Accent })
+	end)
+	NameBox.FocusLost:Connect(function()
+		tween(NameEdge, { Color = Library.Theme.Border })
+	end)
+	local CreateButton = iconButton(NameRow, "plus", "Save a new config", {
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.fromScale(1, 0),
+		Size = 30,
+		IconSize = 15,
+		Filled = true,
+	})
+	Configs:_index("Create config", NameRow, NameRow)
+
+	Configs.Rows = 0
+	local Head = Configs:_holder(18)
+	local HeadText = text({
+		Size = UDim2.new(1, -30, 1, 0),
+		FontFace = FONT_BOLD,
+		TextSize = 10,
+		KeepCase = true,
+		Theme = { TextColor3 = "Muted" },
+		Parent = Head,
+	})
+	local RefreshButton = iconButton(Head, "refresh-cw", "Refresh the list", {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.fromScale(1, 0.5),
+		Size = 22,
+		IconSize = 12,
+	})
+
+	Configs.Rows = 0
+	local ListHolder = Configs:_holder()
+	local ListFrame = create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 0),
+		AutomaticSize = Enum.AutomaticSize.Y,
+		Parent = ListHolder,
+	}, { list(5) })
+
+	local rows = {}
+	local refresh
+	local function notify(message)
+		Library:Notify(Library.Title or "Dexori", message)
+	end
+
+	local function configRow(name, index, autoload)
+		local Row = create("Frame", {
+			Size = UDim2.new(1, 0, 0, 36),
+			LayoutOrder = index,
+			Theme = { BackgroundColor3 = "Field" },
+			Parent = ListFrame,
+		}, { corner(8), stroke("Border") })
+		icon(Row, "folder", 13, {
+			AnchorPoint = Vector2.new(0, 0.5),
+			Position = UDim2.new(0, 11, 0.5, 0),
+			Theme = { ImageColor3 = autoload and "Accent" or "Muted" },
+		})
+		local Name = create("Frame", {
+			BackgroundTransparency = 1,
+			Position = UDim2.fromOffset(32, 0),
+			Size = UDim2.new(1, -150, 1, 0),
+			Parent = Row,
+		})
+		text({
+			Size = UDim2.fromScale(1, 1),
+			FontFace = FONT_MEDIUM,
+			TextSize = 13,
+			Text = name,
+			TextTruncate = Enum.TextTruncate.AtEnd,
+			KeepCase = true,
+			Theme = { TextColor3 = autoload and "Accent" or "Text" },
+			Parent = Name,
+		})
+		local Actions = create("Frame", {
+			AnchorPoint = Vector2.new(1, 0.5),
+			Position = UDim2.new(1, -5, 0.5, 0),
+			Size = UDim2.fromOffset(0, 26),
+			AutomaticSize = Enum.AutomaticSize.X,
+			BackgroundTransparency = 1,
+			Parent = Row,
+		}, { list(2, true, { VerticalAlignment = Enum.VerticalAlignment.Center }) })
+		local Load = iconButton(Actions, "play", "Load", { LayoutOrder = 1 })
+		local Save = iconButton(Actions, "save", "Overwrite with current settings", { LayoutOrder = 2 })
+		local Star, setStar = iconButton(Actions, "star", autoload and "Stop autoloading" or "Load this on start", { LayoutOrder = 3 })
+		setStar("lit", autoload)
+		local Delete, setDelete = iconButton(Actions, "trash-2", "Delete (click twice)", { LayoutOrder = 4 })
+
+		Load.MouseButton1Click:Connect(function()
+			local ok, result = Library:LoadConfig(name)
+			notify(ok and ("Loaded \"" .. name .. "\" (" .. tostring(result) .. " settings).") or ("Couldn't load: " .. tostring(result)))
+		end)
+		Save.MouseButton1Click:Connect(function()
+			local ok, result = Library:SaveConfig(name)
+			notify(ok and ("Saved over \"" .. name .. "\".") or ("Couldn't save: " .. tostring(result)))
+		end)
+		Star.MouseButton1Click:Connect(function()
+			if autoload then
+				Library:SetAutoload("")
+				notify("\"" .. name .. "\" won't load on start any more.")
+			else
+				Library:SetAutoload(name)
+				notify("\"" .. name .. "\" will load on start.")
 			end
 			refresh()
-			ConfigList:SetValue(result)
-			Library:Notify("Dexori", "Created config \"" .. result .. "\".")
-		end,
-	})
-	Configs:AddButton({
-		Text = "Load config",
-		Func = function()
-			local name = picked()
-			if not name then
-				return
-			end
-			local ok, result = Library:LoadConfig(name)
-			Library:Notify("Dexori", ok and ("Loaded config \"" .. name .. "\" (" .. tostring(result) .. " settings).") or ("Failed to load config: " .. tostring(result)))
-		end,
-	})
-	Configs:AddButton({
-		Text = "Overwrite config",
-		Func = function()
-			local name = picked()
-			if not name then
-				return
-			end
-			local ok, result = Library:SaveConfig(name)
-			Library:Notify("Dexori", ok and ("Overwrote config \"" .. name .. "\".") or ("Failed to overwrite config: " .. tostring(result)))
-		end,
-	})
-	Configs:AddButton({ Text = "Refresh list", Func = refresh })
-	Configs:AddButton({
-		Text = "Set as autoload",
-		Func = function()
-			local name = picked()
-			if not name then
-				return
-			end
-			Library:SetAutoload(name)
-			AutoloadLabel:SetText("Current autoload config: " .. name)
-			Library:Notify("Dexori", "\"" .. name .. "\" will load automatically.")
-		end,
-	})
-	Configs:AddButton({
-		Text = "Delete config",
-		Func = function()
-			local name = picked()
-			if not name then
+		end)
+		local armedUntil = 0
+		Delete.MouseButton1Click:Connect(function()
+			if os.clock() > armedUntil then
+				armedUntil = os.clock() + 2.5
+				setDelete("danger", true)
+				task.delay(2.5, function()
+					if os.clock() >= armedUntil and Delete.Parent then
+						setDelete("danger", false)
+					end
+				end)
 				return
 			end
 			local ok, err = Library:DeleteConfig(name)
-			if ok and Library:GetAutoload() == name then
+			if ok and autoload then
 				Library:SetAutoload("")
-				AutoloadLabel:SetText("Current autoload config: none")
 			end
+			notify(ok and ("Deleted \"" .. name .. "\".") or ("Couldn't delete: " .. tostring(err)))
 			refresh()
-			Library:Notify("Dexori", ok and ("Deleted config \"" .. name .. "\".") or ("Failed to delete config: " .. tostring(err)))
-		end,
-	})
+		end)
+		return Row
+	end
+
+	refresh = function()
+		for _, row in ipairs(rows) do
+			row:Destroy()
+		end
+		rows = {}
+		local names = Library:ListConfigs()
+		local current = Library:GetAutoload()
+		HeadText.Text = "SAVED CONFIGS · " .. #names
+		for index, name in ipairs(names) do
+			table.insert(rows, configRow(name, index, name == current))
+		end
+		if #names == 0 then
+			table.insert(rows, text({
+				Size = UDim2.new(1, 0, 0, 34),
+				TextSize = 12,
+				Text = "No configs yet. Name one above and press +.",
+				TextXAlignment = Enum.TextXAlignment.Center,
+				TextWrapped = true,
+				Theme = { TextColor3 = "Muted" },
+				Parent = ListFrame,
+			}))
+		end
+	end
+
+	local function createConfig()
+		if cleanName(NameBox.Text) == "" then
+			notify("Type a config name first.")
+			return
+		end
+		local ok, result = Library:SaveConfig(NameBox.Text)
+		if not ok then
+			notify("Couldn't save: " .. tostring(result))
+			return
+		end
+		NameBox.Text = ""
+		notify("Saved \"" .. result .. "\".")
+		refresh()
+	end
+	CreateButton.MouseButton1Click:Connect(createConfig)
+	NameBox.FocusLost:Connect(function(enter)
+		if enter then
+			createConfig()
+		end
+	end)
+	RefreshButton.MouseButton1Click:Connect(refresh)
+	refresh()
 
 	return Tab
 end
