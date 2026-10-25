@@ -53,7 +53,7 @@ Library:SetFolder("Dexori/my-script")
 local Window = Library:CreateWindow({
 	Title = "Dexori",
 	Footer = "Dexori Hub",
-	FooterRight = "made by me  |  build 1",
+	FooterRight = "made by me · build 1",
 	Badge = "Premium",
 	ToggleKey = "RightControl",
 })

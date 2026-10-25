@@ -3364,15 +3364,6 @@ local function buildKeybindPanel(ScreenGui)
 					BackgroundTransparency = active and 0.9 or 1,
 					Parent = Rows,
 				}, { corner(6) })
-				if active then
-					create("Frame", {
-						AnchorPoint = Vector2.new(0, 0.5),
-						Position = UDim2.new(0, 0, 0.5, 0),
-						Size = UDim2.fromOffset(2, 12),
-						BackgroundColor3 = T.Accent,
-						Parent = Row,
-					}, { corner(1) })
-				end
 				text({
 					Position = UDim2.fromOffset(10, 0),
 					Size = UDim2.new(1, -100, 1, 0),
@@ -3459,10 +3450,6 @@ local function buildWatermark(ScreenGui)
 	local order = 0
 	local function segment()
 		order = order + 1
-		if order > 1 then
-			create("Frame", { Size = UDim2.fromOffset(1, 14), LayoutOrder = order, Theme = { BackgroundColor3 = "Border" }, Parent = Bar })
-			order = order + 1
-		end
 		return create("Frame", {
 			BackgroundTransparency = 1,
 			Size = UDim2.fromOffset(0, 34),
@@ -4233,7 +4220,7 @@ function Library:CreateWindow(info)
 	local function paintStatus()
 		KeyLabel.Text = keyName(Library.ToggleKey)
 		local stats = fps .. " fps · " .. ping .. " ms"
-		FooterRight.Text = not narrow and footerRight and footerRight ~= "" and (footerRight .. "   |   " .. stats) or stats
+		FooterRight.Text = not narrow and footerRight and footerRight ~= "" and (footerRight .. "     " .. stats) or stats
 	end
 	table.insert(compactHooks, function(isCompact)
 		narrow = isCompact
@@ -4705,13 +4692,6 @@ function Library:CreateWindow(info)
 			Theme = { BackgroundColor3 = "Accent" },
 			Parent = Button,
 		}, { corner(8) })
-		local Bar = create("Frame", {
-			AnchorPoint = Vector2.new(0, 0.5),
-			Position = UDim2.new(0, -10, 0.5, 0),
-			Size = UDim2.fromOffset(3, 0),
-			Theme = { BackgroundColor3 = "Accent" },
-			Parent = Button,
-		}, { corner(2) })
 		local wanted = iconName or name
 		local Glyph = icon(Button, Library:HasIcon(wanted) and wanted or "layout-grid", 16, {
 			AnchorPoint = Vector2.new(0, 0.5),
@@ -4761,7 +4741,6 @@ function Library:CreateWindow(info)
 			tween(SelectFill, { BackgroundTransparency = selected and 0.9 or 1 })
 			tween(Label, { TextColor3 = color })
 			tween(Glyph, { ImageColor3 = color })
-			tween(Bar, { Size = UDim2.fromOffset(3, selected and 18 or 0) }, TWEEN_SMOOTH)
 		end
 		table.insert(ThemeCallbacks, paint)
 		Label.TextColor3 = Library.Theme.SubText

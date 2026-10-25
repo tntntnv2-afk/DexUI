@@ -12,7 +12,7 @@ Library:SetFolder("Dexori/showcase")
 local Window = Library:CreateWindow({
 	Title = "Dexori",
 	Footer = "Dexori Hub",
-	FooterRight = "made by Dexori  |  build " .. Library.Version,
+	FooterRight = "made by Dexori · build " .. Library.Version,
 	Badge = "Premium",
 	ToggleKey = "RightControl",
 })
