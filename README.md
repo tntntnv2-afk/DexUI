@@ -43,7 +43,7 @@ python tools/make_sheet.py logo.gif assets/logo_anim.png --height 64 --bg 12,12,
 
 It prints the `DefineAsset` line to paste. `--bg` turns a solid background colour transparent. `--crop x0,y0,x1,y1` trims the frames first. Sheets stay within 1024 x 1024 (Roblox's limit).
 
-Two names are special: `Wordmark` is the logo in the watermark, and `Icon` is the mark at the top of the sidebar and the mobile toggle button. Both default to the animated Dexori D (`assets/dexori_d_anim.png`); define either again to swap it. If an image can't load, the logo falls back to the text "dexori".
+Two names are special: `Icon` is the mark at the top of the sidebar, in the watermark and on the mobile toggle button, and `Wordmark` is what `Library.BuildLogo` shows. Both default to the animated Dexori D (`assets/dexori_d_anim.png`); define either again to swap it. If an image can't load, the logo falls back to the text "dexori".
 
 ## Quick start
 

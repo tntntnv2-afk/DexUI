@@ -58,7 +58,6 @@ local FONT = Font.new(FAMILY, Enum.FontWeight.Medium)
 local FONT_MEDIUM = Font.new(FAMILY, Enum.FontWeight.SemiBold)
 local FONT_SEMI = Font.new(FAMILY, Enum.FontWeight.SemiBold)
 local FONT_BOLD = Font.new(FAMILY, Enum.FontWeight.Bold)
-local FONT_MONO = Font.new("rbxasset://fonts/families/RobotoMono.json", Enum.FontWeight.Medium)
 
 local RADIUS = 8
 local WINDOW_RADIUS = 12
@@ -1557,6 +1556,43 @@ function Elements:AddColorPicker(id, opts)
 	return option
 end
 
+local TextService = game:GetService("TextService")
+local textWidths = {}
+local function measureText(value, font, size)
+	value = tostring(value or "")
+	local key = value .. "\0" .. size .. "\0" .. tostring(font.Weight)
+	if textWidths[key] then
+		return textWidths[key]
+	end
+	local width = (utf8.len(value) or #value) * size * 0.52
+	local ok, bounds = pcall(function()
+		local params = Instance.new("GetTextBoundsParams")
+		params.Text = value
+		params.Font = font
+		params.Size = size
+		params.Width = 1000
+		return TextService:GetTextBoundsAsync(params)
+	end)
+	if ok and typeof(bounds) == "Vector2" and bounds.X > 0 then
+		width = bounds.X
+		textWidths[key] = width
+	end
+	return math.ceil(width)
+end
+local function textWidth(value, font, size, onMeasured)
+	value = tostring(value or "")
+	local key = value .. "\0" .. size .. "\0" .. tostring(font.Weight)
+	if textWidths[key] then
+		return math.ceil(textWidths[key])
+	end
+	if onMeasured then
+		task.spawn(function()
+			onMeasured(measureText(value, font, size))
+		end)
+	end
+	return math.ceil((utf8.len(value) or #value) * size * 0.52)
+end
+
 local function accentButton(parent, label, props)
 	local Edge = create("UIStroke", {
 		ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
@@ -1568,7 +1604,6 @@ local function accentButton(parent, label, props)
 		AnchorPoint = props.AnchorPoint or Vector2.zero,
 		Position = props.Position or UDim2.new(),
 		Size = props.Size,
-		AutomaticSize = props.AutomaticSize or Enum.AutomaticSize.None,
 		AutoButtonColor = false,
 		BackgroundTransparency = 1,
 		FontFace = FONT_SEMI,
@@ -1602,14 +1637,23 @@ function Elements:AddButton(opts, func)
 		Button = accentButton(Holder, opts.Text or "Button", {
 			AnchorPoint = Vector2.new(1, 0.5),
 			Position = UDim2.fromScale(1, 0.5),
-			Size = UDim2.fromOffset(0, 28),
-			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(64, 28),
 		})
-		local function fit()
-			row.Width(1, Button.AbsoluteSize.X / scaleFactor() + 12)
+		local function apply(textSize)
+			local width = math.max(textSize + 30, 64)
+			Button.Size = UDim2.fromOffset(width, 28)
+			row.Width(1, width + 12)
 		end
-		Button:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
-		row.Width(1, 110)
+		local function fit()
+			local label = Button.Text
+			apply(textWidth(label, FONT_SEMI, 13, function(measured)
+				if Button.Text == label then
+					apply(measured)
+				end
+			end))
+		end
+		Button:GetPropertyChangedSignal("Text"):Connect(fit)
+		fit()
 	else
 		Button = accentButton(Holder, opts.Text or "Button", { Size = UDim2.fromScale(1, 1) })
 	end
@@ -3235,43 +3279,70 @@ end
 local function buildKeybindPanel(ScreenGui)
 	local Panel = create("Frame", {
 		Position = UDim2.new(0, 16, 0.38, 0),
-		Size = UDim2.fromOffset(210, 0),
+		Size = UDim2.fromOffset(220, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Visible = false,
-		Theme = { BackgroundColor3 = "Background" },
+		Theme = { BackgroundColor3 = "Panel" },
 		Parent = ScreenGui,
-	}, { corner(), stroke("BorderLight") })
+	}, { corner(10), stroke("Border") })
 	Library.PanelScale = create("UIScale", { Scale = Library.UserScale, Parent = Panel })
 	Library.KeybindPanel = Panel
-	accentLine(Panel)
-	text({ Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -64, 0, 32), FontFace = FONT_SEMI, TextSize = 13, Text = "Keybinds", Parent = Panel })
-	local Count = text({
-		AnchorPoint = Vector2.new(1, 0),
-		Position = UDim2.new(1, -12, 0, 0),
-		Size = UDim2.fromOffset(44, 32),
-		FontFace = FONT_SEMI,
-		TextSize = 12,
-		TextXAlignment = Enum.TextXAlignment.Right,
-		Theme = { TextColor3 = "Muted" },
+	local Head = create("Frame", {
+		BackgroundTransparency = 1,
+		Size = UDim2.new(1, 0, 0, 38),
 		Parent = Panel,
 	})
-	local Rule = create("Frame", { Position = UDim2.fromOffset(12, 32), Size = UDim2.new(1, -24, 0, 1), Theme = { BackgroundColor3 = "BorderLight" }, Parent = Panel })
-	create("UIGradient", {
-		Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) }),
-		Parent = Rule,
+	local Badge = create("Frame", {
+		AnchorPoint = Vector2.new(0, 0.5),
+		Position = UDim2.new(0, 12, 0.5, 0),
+		Size = UDim2.fromOffset(22, 22),
+		BackgroundTransparency = 0.88,
+		Theme = { BackgroundColor3 = "Accent" },
+		Parent = Head,
+	}, { corner(6) })
+	icon(Badge, "keyboard", 13, {
+		AnchorPoint = Vector2.new(0.5, 0.5),
+		Position = UDim2.fromScale(0.5, 0.5),
+		Theme = { ImageColor3 = "Accent" },
 	})
+	text({
+		Position = UDim2.fromOffset(42, 0),
+		Size = UDim2.new(1, -96, 1, 0),
+		FontFace = FONT_BOLD,
+		TextSize = 13,
+		Text = "Keybinds",
+		Parent = Head,
+	})
+	local CountChip = create("Frame", {
+		AnchorPoint = Vector2.new(1, 0.5),
+		Position = UDim2.new(1, -12, 0.5, 0),
+		Size = UDim2.fromOffset(0, 18),
+		AutomaticSize = Enum.AutomaticSize.X,
+		Theme = { BackgroundColor3 = "Field" },
+		Parent = Head,
+	}, { corner(5), stroke("Border"), padding(0, 7, 0, 7) })
+	local Count = text({
+		AutomaticSize = Enum.AutomaticSize.X,
+		Size = UDim2.fromOffset(0, 18),
+		FontFace = FONT_SEMI,
+		TextSize = 11,
+		Theme = { TextColor3 = "SubText" },
+		Parent = CountChip,
+	})
+	create("Frame", { Position = UDim2.fromOffset(0, 38), Size = UDim2.new(1, 0, 0, 1), Theme = { BackgroundColor3 = "Border" }, Parent = Panel })
 	local Rows = create("Frame", {
 		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(0, 33),
+		Position = UDim2.fromOffset(0, 39),
 		Size = UDim2.new(1, 0, 0, 0),
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Parent = Panel,
-	}, { list(3), padding(7, 12, 10, 12) })
+	}, { list(2), padding(6, 6, 7, 6) })
 
 	dragBy(Panel, function(input)
-		return input.Position.Y - Panel.AbsolutePosition.Y <= 32 * Library.PanelScale.Scale
+		return input.Position.Y - Panel.AbsolutePosition.Y <= 38 * Library.PanelScale.Scale
 	end)
 
+	local MODE_SHORT = { Toggle = "toggle", Hold = "hold", Press = "press" }
 	local rows = {}
 	function Library._renderKeybinds()
 		for _, row in ipairs(rows) do
@@ -3286,17 +3357,26 @@ local function buildKeybindPanel(ScreenGui)
 				if active then
 					on = on + 1
 				end
-				local Row = create("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 22), LayoutOrder = index, Parent = Rows })
-				create("Frame", {
-					AnchorPoint = Vector2.new(0, 0.5),
-					Position = UDim2.new(0, 1, 0.5, 0),
-					Size = UDim2.fromOffset(6, 6),
-					BackgroundColor3 = active and T.Accent or T.BorderLight,
-					Parent = Row,
-				}, { round() })
+				local Row = create("Frame", {
+					Size = UDim2.new(1, 0, 0, 26),
+					LayoutOrder = index,
+					BackgroundColor3 = T.Accent,
+					BackgroundTransparency = active and 0.9 or 1,
+					Parent = Rows,
+				}, { corner(6) })
+				if active then
+					create("Frame", {
+						AnchorPoint = Vector2.new(0, 0.5),
+						Position = UDim2.new(0, 0, 0.5, 0),
+						Size = UDim2.fromOffset(2, 12),
+						BackgroundColor3 = T.Accent,
+						Parent = Row,
+					}, { corner(1) })
+				end
 				text({
-					Position = UDim2.fromOffset(14, 0),
-					Size = UDim2.new(1, -86, 1, 0),
+					Position = UDim2.fromOffset(10, 0),
+					Size = UDim2.new(1, -100, 1, 0),
+					FontFace = FONT_MEDIUM,
 					TextSize = 12,
 					Text = entry.Label,
 					TextTruncate = Enum.TextTruncate.AtEnd,
@@ -3304,20 +3384,37 @@ local function buildKeybindPanel(ScreenGui)
 					Theme = false,
 					Parent = Row,
 				})
-				local Chip = create("Frame", {
+				local Right = create("Frame", {
 					AnchorPoint = Vector2.new(1, 0.5),
-					Position = UDim2.fromScale(1, 0.5),
+					Position = UDim2.new(1, -6, 0.5, 0),
 					Size = UDim2.fromOffset(0, 18),
 					AutomaticSize = Enum.AutomaticSize.X,
-					BackgroundColor3 = T.Field,
+					BackgroundTransparency = 1,
 					Parent = Row,
+				}, { list(6, true, { VerticalAlignment = Enum.VerticalAlignment.Center, HorizontalAlignment = Enum.HorizontalAlignment.Right }) })
+				text({
+					AutomaticSize = Enum.AutomaticSize.X,
+					Size = UDim2.fromOffset(0, 18),
+					TextSize = 11,
+					Text = MODE_SHORT[entry.Option.Mode] or "",
+					LayoutOrder = 1,
+					TextColor3 = T.Muted,
+					Theme = false,
+					Parent = Right,
+				})
+				local Chip = create("Frame", {
+					Size = UDim2.fromOffset(0, 18),
+					AutomaticSize = Enum.AutomaticSize.X,
+					LayoutOrder = 2,
+					BackgroundColor3 = T.Field,
+					Parent = Right,
 				}, {
 					corner(5),
 					create("UIStroke", {
 						ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
 						Thickness = 1,
-						Color = active and T.Accent or T.BorderLight,
-						Transparency = active and 0.35 or 0,
+						Color = active and T.Accent or T.Border,
+						Transparency = active and 0.4 or 0,
 					}),
 					padding(0, 7, 0, 7),
 				})
@@ -3327,14 +3424,14 @@ local function buildKeybindPanel(ScreenGui)
 					FontFace = FONT_SEMI,
 					TextSize = 11,
 					Text = keyName(entry.Option.Value),
-					TextColor3 = active and T.Accent or T.Muted,
+					TextColor3 = active and T.Accent or T.SubText,
 					Theme = false,
 					Parent = Chip,
 				})
 				table.insert(rows, Row)
 			end
 		end
-		Count.Text = on .. "/" .. #rows
+		Count.Text = on .. " / " .. #rows
 		popout(Panel, Library.KeybindListEnabled and #rows > 0)
 	end
 	table.insert(ThemeCallbacks, refreshKeybinds)
@@ -3349,77 +3446,87 @@ end
 local function buildWatermark(ScreenGui)
 	local Bar = create("Frame", {
 		AnchorPoint = Vector2.new(0.5, 0),
-		Position = UDim2.new(0.5, 0, 0, 10),
-		Size = UDim2.fromOffset(0, 30),
+		Position = UDim2.new(0.5, 0, 0, 12),
+		Size = UDim2.fromOffset(0, 34),
 		AutomaticSize = Enum.AutomaticSize.X,
 		Visible = Library.WatermarkEnabled,
-		Theme = { BackgroundColor3 = "Background" },
+		Theme = { BackgroundColor3 = "Panel" },
 		Parent = ScreenGui,
-	}, { corner(), stroke("BorderLight") })
+	}, { corner(10), stroke("Border"), list(0, true, { VerticalAlignment = Enum.VerticalAlignment.Center }), padding(0, 6, 0, 6) })
 	Library.WatermarkScale = create("UIScale", { Scale = Library.UserScale, Parent = Bar })
 	Library.Watermark = Bar
-	accentLine(Bar)
-	local Inner = create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.fromOffset(0, 30),
-		AutomaticSize = Enum.AutomaticSize.X,
-		Parent = Bar,
-	}, { list(0, true, { VerticalAlignment = Enum.VerticalAlignment.Center }), padding(0, 4, 0, 4) })
 
 	local order = 0
 	local function segment()
 		order = order + 1
 		if order > 1 then
-			create("Frame", { Size = UDim2.fromOffset(3, 3), LayoutOrder = order, Theme = { BackgroundColor3 = "BorderLight" }, Parent = Inner }, { round() })
+			create("Frame", { Size = UDim2.fromOffset(1, 14), LayoutOrder = order, Theme = { BackgroundColor3 = "Border" }, Parent = Bar })
 			order = order + 1
 		end
 		return create("Frame", {
 			BackgroundTransparency = 1,
-			Size = UDim2.fromOffset(0, 30),
+			Size = UDim2.fromOffset(0, 34),
 			AutomaticSize = Enum.AutomaticSize.X,
 			LayoutOrder = order,
-			Parent = Inner,
-		}, { list(5, true, { VerticalAlignment = Enum.VerticalAlignment.Center }), padding(0, 9, 0, 9) })
+			Parent = Bar,
+		}, { list(6, true, { VerticalAlignment = Enum.VerticalAlignment.Center }), padding(0, 8, 0, 8) })
 	end
-	local function value(parent)
-		return text({ AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 16), FontFace = FONT_MONO, TextSize = 12, LayoutOrder = 1, Parent = parent })
-	end
-	local function unit(parent, label)
-		return text({ AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 16), TextSize = 12, Text = label, LayoutOrder = 2, Theme = { TextColor3 = "Muted" }, Parent = parent })
+	local function stat(iconName, themeKey)
+		local Segment = segment()
+		icon(Segment, iconName, 13, { LayoutOrder = 1, Theme = { ImageColor3 = "Muted" } })
+		return text({
+			AutomaticSize = Enum.AutomaticSize.X,
+			Size = UDim2.fromOffset(0, 16),
+			FontFace = FONT_SEMI,
+			TextSize = 12,
+			LayoutOrder = 2,
+			KeepCase = true,
+			Theme = { TextColor3 = themeKey or "SubText" },
+			Parent = Segment,
+		})
 	end
 
-	buildLogo(segment(), 13)
-	local You = segment()
+	local Brand = segment()
+	local Mark = create("Frame", {
+		Size = UDim2.fromOffset(20, 20),
+		LayoutOrder = 1,
+		BackgroundTransparency = 1,
+		Parent = Brand,
+	})
+	local MarkLetter = text({
+		Size = UDim2.fromScale(1, 1),
+		FontFace = FONT_BOLD,
+		TextSize = 15,
+		Text = "d",
+		TextXAlignment = Enum.TextXAlignment.Center,
+		Theme = { TextColor3 = "Accent" },
+		Parent = Mark,
+	})
+	buildIcon(Mark, 20, MarkLetter)
 	text({
 		AutomaticSize = Enum.AutomaticSize.X,
 		Size = UDim2.fromOffset(0, 16),
-		FontFace = FONT_MEDIUM,
-		TextSize = 12,
-		Text = LocalPlayer.DisplayName,
-		LayoutOrder = 1,
+		FontFace = FONT_BOLD,
+		TextSize = 13,
+		Text = Library.Title or "Dexori",
+		LayoutOrder = 2,
 		KeepCase = true,
-		Parent = You,
+		Parent = Brand,
 	})
-	local Ping = segment()
-	local PingValue = value(Ping)
-	unit(Ping, "ms")
-	local Fps = segment()
-	local FpsValue = value(Fps)
-	unit(Fps, "fps")
-	local Crowd = segment()
-	local PlayerValue = value(Crowd)
-	local PlayerUnit = unit(Crowd, "players")
+	stat("user", "Text").Text = LocalPlayer.DisplayName
+	local FpsValue = stat("activity")
+	local PingValue = stat("wifi")
+	local PlayerValue = stat("users")
 
 	dragBy(Bar)
 
 	local lastFps, lastPing = 0, 0
 	local function paint(fps, ping)
 		lastFps, lastPing = fps or lastFps, ping or lastPing
-		PingValue.Text = tostring(lastPing)
-		FpsValue.Text = tostring(lastFps)
+		FpsValue.Text = lastFps .. " fps"
+		PingValue.Text = lastPing .. " ms"
 		local count = #Players:GetPlayers()
-		PlayerValue.Text = tostring(count)
-		PlayerUnit.Text = count == 1 and "player" or "players"
+		PlayerValue.Text = count .. (count == 1 and " player" or " players")
 	end
 	paint(0, 0)
 	Library._paintWatermark = paint
@@ -4584,8 +4691,19 @@ function Library:CreateWindow(info)
 			AutoButtonColor = false,
 			Text = "",
 			LayoutOrder = navOrder,
-			Theme = { BackgroundColor3 = "Accent" },
 			Parent = Nav,
+		})
+		local HoverFill = create("Frame", {
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Theme = { BackgroundColor3 = "Panel" },
+			Parent = Button,
+		}, { corner(8) })
+		local SelectFill = create("Frame", {
+			Size = UDim2.fromScale(1, 1),
+			BackgroundTransparency = 1,
+			Theme = { BackgroundColor3 = "Accent" },
+			Parent = Button,
 		}, { corner(8) })
 		local Bar = create("Frame", {
 			AnchorPoint = Vector2.new(0, 0.5),
@@ -4639,10 +4757,8 @@ function Library:CreateWindow(info)
 		local function paint()
 			local T = Library.Theme
 			local color = selected and T.Accent or (hovering and T.Text or T.SubText)
-			tween(Button, {
-				BackgroundColor3 = selected and T.Accent or T.Panel,
-				BackgroundTransparency = selected and 0.88 or (hovering and 0 or 1),
-			})
+			tween(HoverFill, { BackgroundTransparency = (hovering and not selected) and 0 or 1 })
+			tween(SelectFill, { BackgroundTransparency = selected and 0.9 or 1 })
 			tween(Label, { TextColor3 = color })
 			tween(Glyph, { ImageColor3 = color })
 			tween(Bar, { Size = UDim2.fromOffset(3, selected and 18 or 0) }, TWEEN_SMOOTH)
