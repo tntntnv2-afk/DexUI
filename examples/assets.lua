@@ -1,6 +1,4 @@
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/tntntnv2-afk/DexUI/main/loader.lua"))()
-Library:DefineAsset("Wordmark", { Path = "assets/wordmark.png", Version = 1 })
-Library:DefineAsset("Icon", { Path = "assets/icon_anim.png", Version = 1, Sheet = { Width = 96, Height = 96, Columns = 10, Frames = 60, Fps = 20 } })
 local Window = Library:CreateWindow({ Title = "Dexori", Subtitle = "Asset test", Footer = "Dexori" })
 local Box = Window:AddTab("Assets"):AddLeftGroupbox("Images")
 local Area = Box:AddCustom(120)

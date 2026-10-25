@@ -30,7 +30,7 @@ local id = Library:GetAsset("Logo")
 ```
 
 - **Version:** bump it whenever you replace an image. The cache file name includes the version, so everyone downloads the new one.
-- **Sheet:** makes the image an animated sprite sheet. Frames go left to right, then top to bottom. Every image on the sheet plays from one shared clock.
+- **Sheet:** makes the image an animated sprite sheet. Frames go left to right, then top to bottom. `Fps` sets the speed, or `Durations` (milliseconds per frame) keeps a GIF's own timing. Every animated image plays from one shared clock.
 - **Path / Url:** `Path` is relative to the repo root. `Url` can point anywhere instead.
 - **GetAsset** waits for the download, so call it inside `task.spawn`. `Image` does that for you and fills the image in when it's ready (`OnLoaded` and `OnFailed` callbacks are optional).
 
@@ -43,7 +43,7 @@ python tools/make_sheet.py logo.gif assets/logo_anim.png --height 64 --bg 12,12,
 
 It prints the `DefineAsset` line to paste. `--bg` turns a solid background colour transparent. `--crop x0,y0,x1,y1` trims the frames first. Sheets stay within 1024 x 1024 (Roblox's limit).
 
-Two names are special: define `Wordmark` and the window title bar and watermark use it instead of the text logo, and define `Icon` for the mobile toggle button. Either can be a still image or an animated sheet.
+Two names are special: `Wordmark` is the logo in the title bar and watermark, and `Icon` is the mobile toggle button. Both default to the animated Dexori D (`assets/dexori_d_anim.png`); define either again to swap it. If an image can't load, the logo falls back to the text "dexori".
 
 ## Quick start
 
@@ -74,9 +74,10 @@ Library:LoadAutoload()
 ```
 loader.lua            entry point, caches the library
 src/ui/Library.lua    Dexori UI
-assets/               images (see assets/README.md)
+assets/               images the library downloads (see assets/README.md)
+art/                  the original Dexori GIFs, not loaded at runtime
 examples/showcase.lua every element in one window
-examples/assets.lua   loads assets/wordmark.png and assets/icon_anim.png to test images
+examples/assets.lua   shows the Wordmark and Icon images to test the image pipeline
 tools/make_sheet.py   GIF or PNG frames -> sprite sheet
 tools/check.py        compiles every Lua file and checks asset paths
 DexUI.lua             DexUI v2, kept for older scripts

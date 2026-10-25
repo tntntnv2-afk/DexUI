@@ -22,22 +22,22 @@ local Library = {
 	WatermarkEnabled = true,
 	Lowercase = false,
 	Theme = {
-		Background = Color3.fromHex("0b0a10"),
-		Chrome = Color3.fromHex("08070c"),
-		Field = Color3.fromHex("0f0d14"),
-		Button = Color3.fromHex("141219"),
-		Hover = Color3.fromHex("110f17"),
+		Background = Color3.fromHex("0c0c0d"),
+		Chrome = Color3.fromHex("080809"),
+		Field = Color3.fromHex("101012"),
+		Button = Color3.fromHex("151517"),
+		Hover = Color3.fromHex("121214"),
 		Outline = Color3.fromHex("000000"),
-		Divider = Color3.fromHex("16141c"),
-		Border = Color3.fromHex("1a1723"),
-		BorderLight = Color3.fromHex("26222f"),
-		Text = Color3.fromHex("e9e6f5"),
-		SubText = Color3.fromHex("aba6bd"),
-		Muted = Color3.fromHex("7a748c"),
-		Accent = Color3.fromHex("a374ff"),
+		Divider = Color3.fromHex("18181b"),
+		Border = Color3.fromHex("1c1c20"),
+		BorderLight = Color3.fromHex("29292e"),
+		Text = Color3.fromHex("ecebee"),
+		SubText = Color3.fromHex("adabb3"),
+		Muted = Color3.fromHex("7b7983"),
+		Accent = Color3.fromHex("e21a22"),
 	},
 	AccentPresets = {
-		Purple = Color3.fromHex("a374ff"),
+		Red = Color3.fromHex("e21a22"),
 	},
 	ForceAccent = true,
 	ForceGold = true,
@@ -511,9 +511,11 @@ function Library:GetAsset(name)
 	end
 	assetLoading[name] = true
 	local ok, id = pcall(function()
-		local extension = (spec.Path or spec.Url or ""):match("%.(%w+)$") or "png"
-		local folder = Library.Folder .. "/assets"
-		local file = string.format("%s/%s_v%s.%s", folder, name, tostring(spec.Version or 1), extension)
+		local source = spec.Path or spec.Url or name
+		local extension = source:match("%.(%w+)$") or "png"
+		local base = source:match("([^/]+)%.%w+$") or name
+		local folder = "Dexori/assets"
+		local file = string.format("%s/%s_v%s.%s", folder, base, tostring(spec.Version or 1), extension)
 		local cached = isfile(file) and readfile(file) or ""
 		if not isImage(cached) then
 			local data = game:HttpGet(spec.Url or (Library.Repo .. spec.Path))
@@ -552,7 +554,28 @@ local function stepLogos(dt)
 		if image.Parent == nil then
 			table.remove(AnimatedLogos, i)
 		elseif image.Visible then
-			local frame = math.floor(animClock * (sheet.Fps or 20)) % sheet.Frames
+			local frame
+			local durations = sheet.Durations
+			if durations then
+				if not sheet._total then
+					local total = 0
+					for _, ms in ipairs(durations) do
+						total += ms
+					end
+					sheet._total = math.max(total, 1)
+				end
+				local at = (animClock * 1000) % sheet._total
+				frame = #durations - 1
+				for index, ms in ipairs(durations) do
+					if at < ms then
+						frame = index - 1
+						break
+					end
+					at -= ms
+				end
+			else
+				frame = math.floor(animClock * (sheet.Fps or 20)) % sheet.Frames
+			end
 			local offset = Vector2.new((frame % sheet.Columns) * sheet.Width, math.floor(frame / sheet.Columns) * sheet.Height)
 			if image.ImageRectOffset ~= offset then
 				image.ImageRectOffset = offset
@@ -603,6 +626,11 @@ function Library:Image(parent, name, props)
 	end)
 	return image
 end
+
+local LOGO_SHEET = { Width = 128, Height = 128, Columns = 8, Frames = 45, Fps = 50, Durations = { 360, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
+	20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 1580 } }
+Library:DefineAsset("Wordmark", { Path = "assets/dexori_d_anim.png", Version = 1, Sheet = LOGO_SHEET })
+Library:DefineAsset("Icon", { Path = "assets/dexori_d_anim.png", Version = 1, Sheet = LOGO_SHEET })
 
 local function buildLogo(parent, height, layoutOrder)
 	local Holder = create("Frame", {
@@ -3237,11 +3265,11 @@ function Library:SetWatermark(enabled)
 end
 
 local ACCENT_SHEEN = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.new(0.5, 0.32, 0.74)),
-	ColorSequenceKeypoint.new(0.4, Color3.new(0.92, 0.86, 0.97)),
+	ColorSequenceKeypoint.new(0, Color3.new(0.66, 0.5, 0.5)),
+	ColorSequenceKeypoint.new(0.4, Color3.new(0.97, 0.9, 0.9)),
 	ColorSequenceKeypoint.new(0.5, Color3.new(1, 1, 1)),
-	ColorSequenceKeypoint.new(0.6, Color3.new(0.92, 0.86, 0.97)),
-	ColorSequenceKeypoint.new(1, Color3.new(0.44, 0.27, 0.68)),
+	ColorSequenceKeypoint.new(0.6, Color3.new(0.97, 0.9, 0.9)),
+	ColorSequenceKeypoint.new(1, Color3.new(0.6, 0.45, 0.45)),
 })
 local ACCENT_SWAY = TweenInfo.new(2.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
 local sheenStarted = false

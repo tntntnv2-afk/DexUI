@@ -23,8 +23,11 @@ def load_frames(source):
         names = sorted(n for n in os.listdir(source) if n.lower().endswith(".png"))
         return [Image.open(os.path.join(source, n)).convert("RGBA") for n in names], None
     image = Image.open(source)
-    duration = image.info.get("duration")
-    return [frame.convert("RGBA") for frame in ImageSequence.Iterator(image)], duration
+    frames, durations = [], []
+    for frame in ImageSequence.Iterator(image):
+        frames.append(frame.convert("RGBA"))
+        durations.append(frame.info.get("duration") or image.info.get("duration") or 50)
+    return frames, durations
 
 
 def key_out(frame, bg):
@@ -50,7 +53,7 @@ def premultiplied_resize(frame, size):
 
 
 def build(source, out, height, crop=None, bg=None, fps=None):
-    frames, duration = load_frames(source)
+    frames, durations = load_frames(source)
     if not frames:
         raise SystemExit("no frames found")
     if crop:
@@ -63,18 +66,24 @@ def build(source, out, height, crop=None, bg=None, fps=None):
     columns = max(1, MAX_SIDE // width)
     rows = -(-len(frames) // columns)
     while rows * height > MAX_SIDE:
+        if durations:
+            durations = [durations[i] + (durations[i + 1] if i + 1 < len(durations) else 0) for i in range(0, len(durations), 2)]
         frames = frames[::2]
         rows = -(-len(frames) // columns)
     sheet = Image.new("RGBA", (min(columns, len(frames)) * width, rows * height), (0, 0, 0, 0))
     for index, frame in enumerate(frames):
         sheet.paste(premultiplied_resize(frame, (width, height)), ((index % columns) * width, (index // columns) * height))
     sheet.save(out, optimize=True)
-    if fps is None:
-        fps = round(1000 / duration) if duration else 20
+    timing = ""
+    if fps is None and durations and len(set(durations)) > 1:
+        timing = ", Durations = { " + ", ".join(str(d) for d in durations) + " }"
+        fps = round(1000 / min(durations))
+    elif fps is None:
+        fps = round(1000 / durations[0]) if durations else 20
     name = os.path.splitext(os.path.basename(out))[0]
     rel = os.path.relpath(out).replace(os.sep, "/")
     print(f"{len(frames)} frames, {width}x{height} each, sheet {sheet.size[0]}x{sheet.size[1]}")
-    print(f'Library:DefineAsset("{name}", {{ Path = "{rel}", Version = 1, Sheet = {{ Width = {width}, Height = {height}, Columns = {columns}, Frames = {len(frames)}, Fps = {fps} }} }})')
+    print(f'Library:DefineAsset("{name}", {{ Path = "{rel}", Version = 1, Sheet = {{ Width = {width}, Height = {height}, Columns = {columns}, Frames = {len(frames)}, Fps = {fps}{timing} }} }})')
 
 
 def main(argv):
