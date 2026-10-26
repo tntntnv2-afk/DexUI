@@ -12,6 +12,10 @@ The loader caches the library in `Dexori/library_cache.lua`, starts from the cac
 
 The old library (v2) is still at `DexUI.lua` in the repo root, so scripts that load it keep working.
 
+## Anti-AFK
+
+Built in, nothing to turn on. As soon as the library loads it stops Roblox's 20-minute idle kick: it switches off the game's own idle handlers (when the executor has `getconnections`) and answers the idle event with a fake right click through `VirtualUser`. Unloading the library turns it off again.
+
 ## Custom images
 
 Images live in `assets/` and are downloaded the first time they're used, then cached in the executor's `Dexori/assets/` folder and shown with `getcustomasset`. Executors without file functions get the `Fallback` image instead (or nothing).

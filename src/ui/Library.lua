@@ -54,6 +54,36 @@ local Loops = {}
 local PopupScales = {}
 local ScaleHooks = {}
 
+do
+	local okUser, VirtualUser = pcall(game.GetService, game, "VirtualUser")
+	if LocalPlayer then
+		if type(getconnections) == "function" then
+			pcall(function()
+				local disabled = {}
+				for _, connection in ipairs(getconnections(LocalPlayer.Idled)) do
+					if connection.Disable and connection.Enable then
+						connection:Disable()
+						table.insert(disabled, connection)
+					end
+				end
+				table.insert(UnloadCallbacks, function()
+					for _, connection in ipairs(disabled) do
+						pcall(connection.Enable, connection)
+					end
+				end)
+			end)
+		end
+		if okUser and VirtualUser then
+			table.insert(Connections, LocalPlayer.Idled:Connect(function()
+				pcall(function()
+					VirtualUser:CaptureController()
+					VirtualUser:ClickButton2(Vector2.new())
+				end)
+			end))
+		end
+	end
+end
+
 local FAMILY = "rbxasset://fonts/families/BuilderSans.json"
 local FONT = Font.new(FAMILY, Enum.FontWeight.Medium)
 local FONT_MEDIUM = Font.new(FAMILY, Enum.FontWeight.SemiBold)
