@@ -1,6 +1,6 @@
 # Dexori UI
 
-A Roblox UI library, built on the Kompile UI v5 base: a window with a sidebar of icon tabs, a header with the page title, game and search, card groupboxes, toggles with keybinds and colour pickers, sliders, dropdowns, inputs, labels, dividers, an ESP preview, notifications, a keybind list, a watermark, themes, UI scale, and saved configs with autoload.
+A Roblox UI library with the Kompile UI v5 look in Dexori deep blue (#2563eb): a window with a title bar (logo, game and search), a scrolling tab bar with icons, a status bar, groupboxes, toggles with keybinds and colour pickers, sliders, dropdowns, inputs, labels, dividers, an ESP preview, notifications, a keybind list, a watermark, themes, UI scale, and saved configs with autoload.
 
 ## Load
 
@@ -47,7 +47,7 @@ python tools/make_sheet.py logo.gif assets/logo_anim.png --height 64 --bg 12,12,
 
 It prints the `DefineAsset` line to paste. `--bg` turns a solid background colour transparent. `--crop x0,y0,x1,y1` trims the frames first. Sheets stay within 1024 x 1024 (Roblox's limit).
 
-Two names are special: `Icon` is the mark at the top of the sidebar, in the watermark and on the mobile toggle button, and `Wordmark` is what `Library.BuildLogo` shows. Both default to the animated Dexori D (`assets/dexori_d_anim.png`); define either again to swap it. If an image can't load, the logo falls back to the text "dexori".
+Two names are special: `Icon` is the mark in the title bar, in the watermark and on the mobile toggle button, and `Wordmark` is what `Library.BuildLogo` shows. Both default to the animated blue Dexori D (`assets/dexori_d_anim_blue.png`); define either again to swap it. If an image can't load, the logo falls back to the text "dexori".
 
 ## Quick start
 
@@ -142,6 +142,7 @@ Card:SetTarget(nil)
 ```
 loader.lua            entry point, caches the library
 src/ui/Library.lua    Dexori UI
+src/ui/Library_test.lua the testing copy (the Bloodlines dev build loads it)
 assets/               images the library downloads (see assets/README.md)
 art/                  the original Dexori GIFs, not loaded at runtime
 examples/showcase.lua every element in one window
