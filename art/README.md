@@ -14,3 +14,5 @@ All four are on a solid #0a0a0b background, so use `--bg 10,10,11`.
 ```
 python tools/make_sheet.py art/dexori_icon_animated.gif assets/dexori_d_anim.png --height 128 --crop 106,95,426,415 --bg 10,10,11
 ```
+
+Each GIF also has a deep blue copy (`*_blue.gif`, accent #2563eb) used by the test library. `assets/dexori_d_anim_blue.png` is the blue sprite sheet, recoloured from `assets/dexori_d_anim.png`.

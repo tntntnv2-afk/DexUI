@@ -36,11 +36,11 @@ local Library = {
 		Text = Color3.fromHex("ecebee"),
 		SubText = Color3.fromHex("adabb3"),
 		Muted = Color3.fromHex("7b7983"),
-		Accent = Color3.fromHex("e21a22"),
+		Accent = Color3.fromHex("2563eb"),
 		Toggle = Color3.fromHex("2a2a30"),
 	},
 	AccentPresets = {
-		Red = Color3.fromHex("e21a22"),
+		Blue = Color3.fromHex("2563eb"),
 	},
 	ForceAccent = true,
 	ForceGold = true,
@@ -636,8 +636,8 @@ end
 
 local LOGO_SHEET = { Width = 128, Height = 128, Columns = 8, Frames = 45, Fps = 50, Durations = { 360, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20,
 	20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 1580 } }
-Library:DefineAsset("Wordmark", { Path = "assets/dexori_d_anim.png", Version = 1, Sheet = LOGO_SHEET })
-Library:DefineAsset("Icon", { Path = "assets/dexori_d_anim.png", Version = 1, Sheet = LOGO_SHEET })
+Library:DefineAsset("Wordmark", { Path = "assets/dexori_d_anim_blue.png", Version = 1, Sheet = LOGO_SHEET })
+Library:DefineAsset("Icon", { Path = "assets/dexori_d_anim_blue.png", Version = 1, Sheet = LOGO_SHEET })
 
 local function buildLogo(parent, height, layoutOrder)
 	local Holder = create("Frame", {
@@ -3727,11 +3727,11 @@ function Library:SetWatermark(enabled)
 end
 
 local ACCENT_SHEEN = ColorSequence.new({
-	ColorSequenceKeypoint.new(0, Color3.new(0.55, 0.3, 0.3)),
-	ColorSequenceKeypoint.new(0.4, Color3.new(0.95, 0.86, 0.86)),
+	ColorSequenceKeypoint.new(0, Color3.new(0.3, 0.38, 0.55)),
+	ColorSequenceKeypoint.new(0.4, Color3.new(0.86, 0.9, 0.96)),
 	ColorSequenceKeypoint.new(0.5, Color3.new(1, 1, 1)),
-	ColorSequenceKeypoint.new(0.6, Color3.new(0.95, 0.86, 0.86)),
-	ColorSequenceKeypoint.new(1, Color3.new(0.5, 0.26, 0.27)),
+	ColorSequenceKeypoint.new(0.6, Color3.new(0.86, 0.9, 0.96)),
+	ColorSequenceKeypoint.new(1, Color3.new(0.26, 0.33, 0.5)),
 })
 local ACCENT_SWAY = TweenInfo.new(2.6, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true)
 local sheenStarted = false
@@ -5464,7 +5464,7 @@ function Library:CreateWindow(info)
 	local PAGE_IN = TweenInfo.new(0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 	local COVER_IN = TweenInfo.new(0.24, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 	local navOrder = 0
-	local tabIcons = info.TabIcons == true
+	local tabIcons = info.TabIcons ~= false
 
 	function Window:AddSection(title)
 		navOrder = navOrder + 1
