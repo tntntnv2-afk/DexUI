@@ -880,8 +880,9 @@ return function(env)
 			ui.mvList = UI.scroll(panel, { Position = UDim2.fromOffset(8, 52), Size = UDim2.new(1, -16, 1, -104) }, Settings.compact and 3 or 5)
 			UI.new("Frame", { BackgroundColor3 = UI.T("Divider"), BorderSizePixel = 0, Position = UDim2.new(0, 12, 1, -48), Size = UDim2.new(1, -24, 0, 1) }, panel)
 			ui.mvCount = UI.label(panel, { TextColor3 = UI.T("Muted"), TextSize = 12, Position = UDim2.new(0, 14, 1, -40), Size = UDim2.new(0.4, 0, 0, 30) })
-			ui.mvActions = UI.row(panel, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 1, -40), Size = UDim2.fromOffset(460, 30) }, 6,
+			ui.mvActions = UI.row(panel, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 1, -40), Size = UDim2.fromOffset(580, 30) }, 6,
 				Enum.HorizontalAlignment.Right)
+			ui.saveFile = UI.button(ui.mvActions, "Save to File", { Size = UDim2.fromOffset(104, 30), TextSize = 12, LayoutOrder = 0 })
 			ui.exportAll = UI.button(ui.mvActions, "Export All", { Size = UDim2.fromOffset(100, 30), TextSize = 12, LayoutOrder = 1 })
 			ui.exportChanged = UI.button(ui.mvActions, "Export Changes", { Size = UDim2.fromOffset(150, 30), TextSize = 12, LayoutOrder = 2 })
 			ui.importOpen = UI.primary(ui.mvActions, "Import", { Size = UDim2.fromOffset(90, 30), TextSize = 12, LayoutOrder = 3 })
@@ -1028,7 +1029,7 @@ return function(env)
 		ui.cancel = UI.button(ui.pop, "Cancel", { AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -114, 1, -14), Size = UDim2.fromOffset(80, 30), ZIndex = 22 })
 
 		ui.settings = UI.new("Frame", { BackgroundColor3 = UI.T("Chrome"), Visible = false, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 48),
-			Size = UDim2.fromOffset(350, 322), ZIndex = 30 }, win)
+			Size = UDim2.fromOffset(350, 520), ZIndex = 30 }, win)
 		UI.corner(ui.settings, 10)
 		UI.stroke(ui.settings)
 		UI.label(ui.settings, { Text = "Builder Settings", FontFace = UI.SEMI, TextSize = 14, Position = UDim2.fromOffset(14, 10), Size = UDim2.new(1, -28, 0, 20), ZIndex = 31 })
@@ -1061,6 +1062,13 @@ return function(env)
 			saveSettings()
 		end)
 		s.hidePaint = hidePaint
+		UI.new("Frame", { BackgroundColor3 = UI.T("Divider"), BorderSizePixel = 0, Position = UDim2.fromOffset(14, 282), Size = UDim2.new(1, -28, 0, 1) }, ui.settings)
+		UI.label(ui.settings, { Text = "Move Files", FontFace = UI.SEMI, TextSize = 13, Position = UDim2.fromOffset(14, 290), Size = UDim2.new(1, -28, 0, 18) })
+		ui.fileNow = UI.label(ui.settings, { TextColor3 = UI.T("Muted"), TextSize = 11, Position = UDim2.fromOffset(14, 308), Size = UDim2.new(1, -28, 0, 15),
+			TextTruncate = Enum.TextTruncate.AtEnd })
+		ui.fileName = UI.field(ui.settings, { PlaceholderText = "Name it, like bloodlines", Position = UDim2.fromOffset(14, 330), Size = UDim2.new(1, -112, 0, 28), TextSize = 12 })
+		ui.fileCreate = UI.primary(ui.settings, "Create", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -14, 0, 330), Size = UDim2.fromOffset(84, 28), TextSize = 12 })
+		ui.fileList = UI.scroll(ui.settings, { Position = UDim2.fromOffset(10, 366), Size = UDim2.new(1, -20, 0, 104) }, 4)
 		ui.reset = UI.button(ui.settings, "Reset", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 14, 1, -12), Size = UDim2.fromOffset(70, 26), TextSize = 12 })
 		ui.unload = UI.danger(ui.settings, "Unload Script", { AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -14, 1, -12), Size = UDim2.fromOffset(110, 26), TextSize = 12 })
 		ui.unload.MouseButton1Click:Connect(function()
@@ -1077,12 +1085,53 @@ return function(env)
 			saveSettings()
 			B.rebuild()
 		end)
+		function s.drawFiles()
+			UI.clear(ui.fileList)
+			ui.fileNow.Text = "Working in: " .. (AP.fileName or "game default") .. "  ·  saves and changes go there"
+			local names = AP.listFiles and AP.listFiles() or {}
+			local rows = { { name = nil, label = "Game default" } }
+			for _, name in ipairs(names) do
+				table.insert(rows, { name = name, label = name })
+			end
+			for i, r in ipairs(rows) do
+				local active = AP.fileName == r.name
+				local row = UI.new("Frame", { BackgroundColor3 = UI.T("Panel"), Size = UDim2.new(1, 0, 0, 30), LayoutOrder = i }, ui.fileList)
+				UI.corner(row, 6)
+				UI.stroke(row, active and UI.T("Accent") or UI.T("Border"))
+				UI.label(row, { Text = r.label, FontFace = UI.SEMI, TextSize = 12, TextColor3 = r.name and UI.T("Text") or UI.T("SubText"),
+					Position = UDim2.fromOffset(10, 0), Size = UDim2.new(1, -110, 1, 0), TextTruncate = Enum.TextTruncate.AtEnd })
+				if active then
+					UI.pill(row, "working in", UI.T("Accent"), { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0) })
+				else
+					local use = UI.button(row, "Work In", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -4, 0.5, 0), Size = UDim2.fromOffset(72, 24), TextSize = 11 })
+					use.MouseButton1Click:Connect(function()
+						AP.useFile(r.name)
+						B.selected, AP.selectedId = nil, nil
+						UI.notify("Working in " .. (r.name or "the game default file") .. " now (" .. AP.savedCount() .. " saved moves)")
+						s.drawFiles()
+						s.refresh()
+					end)
+				end
+			end
+		end
+		ui.fileCreate.MouseButton1Click:Connect(function()
+			local name, note = AP.createFile(ui.fileName.Text)
+			if not name then
+				return UI.notify(note or "Couldn't make that file")
+			end
+			ui.fileName.Text = ""
+			UI.notify(note == "exists" and (name .. " already exists. Click Work In to use it.") or ("Made " .. name .. ". Click Work In to save into it."))
+			s.drawFiles()
+		end)
 		function s.paintSettings()
 			for key, paint in pairs(s.settingPaint) do
 				paint(Settings[key])
 			end
 			if s.hidePaint then
 				s.hidePaint()
+			end
+			if ui.settings.Visible then
+				s.drawFiles()
 			end
 		end
 
@@ -1561,7 +1610,12 @@ return function(env)
 				UI.statPill(holder, r.id, { LayoutOrder = 1 })
 				UI.modePill(holder, r.move, { LayoutOrder = 2 })
 				local edit = UI.button(holder, "Edit", { Size = UDim2.fromOffset(46, 24), TextSize = 12, LayoutOrder = 3 })
-				local del = UI.danger(holder, "×", { Size = UDim2.fromOffset(26, 24), TextSize = 16, LayoutOrder = 4 })
+				local del = UI.new("TextButton", { AutoButtonColor = false, BackgroundColor3 = UI.T("Button"), FontFace = UI.SEMI, TextSize = 16,
+					TextColor3 = UI.T("Text"), Text = "×", Size = UDim2.fromOffset(26, 24), LayoutOrder = 4 }, holder)
+				UI.corner(del, 6)
+				local delEdge = UI.stroke(del)
+				local delGlow = UI.stroke(del, Color3.fromHex("f0506e"), 0.55, 4)
+				delGlow.Enabled = false
 				switch.MouseButton1Click:Connect(function()
 					r.move.off = (not r.move.off) or nil
 					AP.changed(r.id)
@@ -1571,21 +1625,36 @@ return function(env)
 					B.tab = "manual"
 					select(r.id)
 				end)
-				local armed = false
+				local RED = Color3.fromHex("f0506e")
+				local function isArmed()
+					return B.armedDelete == r.id and os.clock() < (B.armedUntil or 0)
+				end
+				local function paintDel()
+					local armed = isArmed()
+					del.TextColor3 = armed and RED or UI.T("Text")
+					del.BackgroundColor3 = armed and RED:Lerp(UI.T("Button"), 0.78) or UI.T("Button")
+					delEdge.Color = armed and RED or UI.T("BorderLight")
+					delGlow.Enabled = armed
+				end
+				paintDel()
+				del.MouseEnter:Connect(function()
+					if not isArmed() then
+						delEdge.Color = UI.T("Muted")
+					end
+				end)
+				del.MouseLeave:Connect(paintDel)
 				del.MouseButton1Click:Connect(function()
-					if not armed then
-						armed = true
-						del.Text = "Delete?"
-						del.Size = UDim2.fromOffset(64, 24)
-						task.delay(2.5, function()
-							if armed and del.Parent then
-								armed = false
-								del.Text = "×"
-								del.Size = UDim2.fromOffset(26, 24)
+					if not isArmed() then
+						B.armedDelete, B.armedUntil = r.id, os.clock() + 2.5
+						paintDel()
+						task.delay(2.55, function()
+							if del.Parent then
+								paintDel()
 							end
 						end)
 						return
 					end
+					B.armedDelete = nil
 					AP.deleteMove(r.id)
 					s.refresh()
 				end)
@@ -1596,7 +1665,7 @@ return function(env)
 			end
 			local total = AP.savedCount()
 			local changed = AP.changedCount and AP.changedCount() or 0
-			ui.mvCount.Text = string.format("%d saved  ·  %d changed this session", total, changed)
+			ui.mvCount.Text = string.format("%d saved  ·  %d changed  ·  in %s", total, changed, AP.fileName or "game default")
 			ui.exportChanged.Text = string.format("Export Changes (%d)", changed)
 		end
 
@@ -1609,6 +1678,9 @@ return function(env)
 			UI.pill(ui.foot, on and "auto parry on" or "auto parry off", on and UI.T("Accent") or UI.T("Muted"), { LayoutOrder = 3 })
 			if AP.readOnly then
 				UI.pill(ui.foot, "not saving: file unreadable", UI.T("Text"), { LayoutOrder = 4 })
+			end
+			if AP.fileName then
+				UI.pill(ui.foot, "file: " .. AP.fileName, UI.T("Accent"), { LayoutOrder = 5 })
 			end
 			if B.tab == "parry" then
 				ui.hint.Text = "settings save automatically  ·  " .. UI.keyLabel(UI.keyFrom(Settings.hideKey)) .. " hides this"
@@ -1914,9 +1986,67 @@ return function(env)
 			AP.changed()
 			s.refresh()
 		end)
-		local function closePop()
-			ui.pop.Visible, ui.shade.Visible = false, false
+		ui.filePop = UI.new("Frame", { BackgroundColor3 = UI.T("Chrome"), Visible = false, AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5),
+			Size = UDim2.fromOffset(420, 330), ZIndex = 21 }, win)
+		UI.corner(ui.filePop, 10)
+		UI.stroke(ui.filePop)
+		UI.label(ui.filePop, { Text = "Save to File", FontFace = UI.SEMI, TextSize = 15, Position = UDim2.fromOffset(16, 12), Size = UDim2.new(1, -32, 0, 20) })
+		UI.label(ui.filePop, { Text = "Copies your saved moves into a file. Moves already in it stay, same ones get replaced.", TextColor3 = UI.T("Muted"),
+			TextSize = 12, TextWrapped = true, TextYAlignment = Enum.TextYAlignment.Top, Position = UDim2.fromOffset(16, 34), Size = UDim2.new(1, -32, 0, 32) })
+		ui.saveName = UI.field(ui.filePop, { PlaceholderText = "New file name", Position = UDim2.fromOffset(16, 72), Size = UDim2.new(1, -150, 0, 30), TextSize = 12 })
+		ui.saveNew = UI.primary(ui.filePop, "Create & Save", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -16, 0, 72), Size = UDim2.fromOffset(118, 30), TextSize = 12 })
+		ui.saveList = UI.scroll(ui.filePop, { Position = UDim2.fromOffset(12, 112), Size = UDim2.new(1, -24, 1, -162) }, 4)
+		ui.saveClose = UI.button(ui.filePop, "Close", { AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -16, 1, -12), Size = UDim2.fromOffset(80, 30), TextSize = 12 })
+		local function saveInto(name)
+			local n, err = AP.saveTo(name)
+			if not n then
+				return UI.notify(err or "Couldn't save")
+			end
+			UI.notify("Saved " .. n .. " move" .. (n == 1 and "" or "s") .. " to " .. (name or "the game default file"))
+			s.drawSaveList()
 		end
+		function s.drawSaveList()
+			UI.clear(ui.saveList)
+			local rows = { { name = nil, label = "Game default" } }
+			for _, name in ipairs(AP.listFiles and AP.listFiles() or {}) do
+				table.insert(rows, { name = name, label = name })
+			end
+			for i, r in ipairs(rows) do
+				local here = AP.fileName == r.name
+				local row = UI.new("Frame", { BackgroundColor3 = UI.T("Panel"), Size = UDim2.new(1, 0, 0, 34), LayoutOrder = i }, ui.saveList)
+				UI.corner(row, 7)
+				UI.stroke(row, UI.T("Border"))
+				UI.label(row, { Text = r.label, FontFace = UI.SEMI, TextSize = 13, TextColor3 = r.name and UI.T("Text") or UI.T("SubText"),
+					Position = UDim2.fromOffset(12, 0), Size = UDim2.new(1, -200, 1, 0), TextTruncate = Enum.TextTruncate.AtEnd })
+				local count = AP.countIn and AP.countIn(r.name and AP.pathFor(r.name) or AP.DEFAULT_FILE) or 0
+				UI.label(row, { Text = here and "working in" or (count .. " moves"), TextColor3 = here and UI.T("Accent") or UI.T("Muted"), TextSize = 11,
+					TextXAlignment = Enum.TextXAlignment.Right, AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -94, 0.5, 0), Size = UDim2.fromOffset(90, 16) })
+				local b = UI.button(row, "Save Here", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0), Size = UDim2.fromOffset(80, 26), TextSize = 12 })
+				b.MouseButton1Click:Connect(function()
+					saveInto(r.name)
+				end)
+			end
+		end
+		ui.saveFile.MouseButton1Click:Connect(function()
+			if AP.savedCount() == 0 then
+				return UI.notify("No saved moves to put in a file yet")
+			end
+			ui.saveName.Text = ""
+			s.drawSaveList()
+			ui.filePop.Visible, ui.shade.Visible = true, true
+		end)
+		ui.saveNew.MouseButton1Click:Connect(function()
+			local name, note = AP.createFile(ui.saveName.Text)
+			if not name then
+				return UI.notify(note or "Couldn't make that file")
+			end
+			ui.saveName.Text = ""
+			saveInto(name)
+		end)
+		local function closePop()
+			ui.pop.Visible, ui.shade.Visible, ui.filePop.Visible = false, false, false
+		end
+		ui.saveClose.MouseButton1Click:Connect(closePop)
 		ui.importOpen.MouseButton1Click:Connect(function()
 			ui.paste.Text = ""
 			ui.pop.Visible, ui.shade.Visible = true, true
