@@ -182,11 +182,7 @@ return function(env)
 		return object
 	end
 	function UI.panel(parent, x, y, w, h)
-		local frame = UI.new("Frame", { BackgroundColor3 = UI.T("Chrome"), Position = x, Size = y }, parent)
-		if typeof(x) ~= "UDim2" then
-			frame.Position = UDim2.fromOffset(x, y)
-			frame.Size = UDim2.fromOffset(w, h)
-		end
+		local frame = UI.new("Frame", { BackgroundColor3 = UI.T("Chrome"), Position = UDim2.fromOffset(x, y), Size = UDim2.fromOffset(w, h) }, parent)
 		UI.corner(frame, 10)
 		UI.stroke(frame)
 		return frame
@@ -232,7 +228,7 @@ return function(env)
 		local buttons = {}
 		local width = 1 / #items
 		for i, item in ipairs(items) do
-			local b = UI.new("TextButton", { AutoButtonColor = false, BackgroundColor3 = item[3] or UI.T("Accent"), BackgroundTransparency = 1, FontFace = UI.SEMI,
+			local b = UI.new("TextButton", { AutoButtonColor = false, BackgroundColor3 = UI.T("Accent"), BackgroundTransparency = 1, FontFace = UI.SEMI,
 				TextSize = 12, TextColor3 = UI.T("SubText"), Text = item[2], Position = UDim2.new(width * (i - 1), 3, 0, 3), Size = UDim2.new(width, -6, 1, -6) }, holder)
 			UI.corner(b, 5)
 			b.MouseButton1Click:Connect(function()
@@ -707,7 +703,7 @@ return function(env)
 			ui.baseField, ui.baseBox = labeled("Base s", "0.300", 3, 62)
 			ui.perField, ui.perBox = labeled("ms/stud", "0.0", 4, 52)
 			ui.fit = UI.button(ui.inputs, "Fit", { Size = UDim2.fromOffset(46, 28), LayoutOrder = 5, TextSize = 12 })
-			s.paintMode = UI.segmented(setup, { { "timed", "Timed", true }, { "rush", "Rush", true }, { "dash", "Dash", true }, { "range", "Range", true } },
+			s.paintMode = UI.segmented(setup, { { "timed", "Timed" }, { "rush", "Rush" }, { "dash", "Dash" }, { "range", "Range" } },
 				{ Position = UDim2.fromOffset(56, 52), Size = UDim2.fromOffset(300, 30) }, function(value)
 					local entry = entryFor(B.selected)
 					if not entry then
@@ -1619,7 +1615,21 @@ return function(env)
 			B.tab = Settings.tab
 		end
 		AP.builderOpen = true
-		S = buildWindow()
+		local ok, result = pcall(buildWindow)
+		if not ok then
+			AP.builderOpen = false
+			for _, gui in ipairs(UI.gui():GetChildren()) do
+				if gui.Name == "DexoriApBuilder" then
+					gui:Destroy()
+				end
+			end
+			UI.notify("AP Builder window failed to open: " .. tostring(result))
+			if AP.paintButtons then
+				AP.paintButtons()
+			end
+			return
+		end
+		S = result
 		S.paintSettings()
 		S.setPlaying(false)
 		S.refresh()
