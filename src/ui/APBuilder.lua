@@ -38,7 +38,7 @@ return function(env)
 	}
 
 	local SETTINGS_FILE = "Dexori/Universal/ap_builder.json"
-	local DEFAULTS = { scale = 1, preview = true, compact = false, tab = "auto", nudge = 20 }
+	local DEFAULTS = { scale = 1, preview = true, compact = false, tab = "parry", nudge = 20, hideKey = "RightControl" }
 	local Settings = table.clone(DEFAULTS)
 	pcall(function()
 		if isfile(SETTINGS_FILE) then
@@ -53,8 +53,8 @@ return function(env)
 		end
 	end)
 	Settings.scale = math.clamp(Settings.scale, 0.7, 1.3)
-	if not table.find({ "auto", "manual", "moves" }, Settings.tab) then
-		Settings.tab = "auto"
+	if not table.find({ "parry", "auto", "manual", "moves" }, Settings.tab) then
+		Settings.tab = "parry"
 	end
 	if not table.find({ 10, 20, 50 }, Settings.nudge) then
 		Settings.nudge = 20
@@ -250,19 +250,81 @@ return function(env)
 	function UI.fmt(t)
 		return string.format("%.3f", t or 0)
 	end
-	function UI.notify(text)
-		if AP.notify then
-			return AP.notify(text)
+	local Toasts = { n = 0 }
+	function UI.toast(text, duration)
+		local gui = Toasts.gui
+		if not gui or not gui.Parent then
+			gui = UI.new("ScreenGui", { Name = "DexoriApToasts", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 1001,
+				ZIndexBehavior = Enum.ZIndexBehavior.Sibling }, UI.gui())
+			Toasts.gui = gui
+			Toasts.holder = UI.new("Frame", { BackgroundTransparency = 1, AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -18, 1, -18),
+				Size = UDim2.fromOffset(320, 420) }, gui)
+			UI.new("UIListLayout", { VerticalAlignment = Enum.VerticalAlignment.Bottom, HorizontalAlignment = Enum.HorizontalAlignment.Right,
+				Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, Toasts.holder)
 		end
-		pcall(function()
-			Library:Notify("AP Builder", text, 4)
+		Toasts.n += 1
+		local card = UI.new("Frame", { BackgroundColor3 = UI.T("Chrome"), Size = UDim2.new(1, 0, 0, 40), AutomaticSize = Enum.AutomaticSize.Y,
+			LayoutOrder = Toasts.n }, Toasts.holder)
+		UI.corner(card, 8)
+		UI.stroke(card)
+		UI.pad(card, 16, 14, 10, 11)
+		local bar = UI.new("Frame", { BackgroundColor3 = UI.T("Accent"), BorderSizePixel = 0, Position = UDim2.new(0, -16, 0, 2), Size = UDim2.new(0, 3, 1, -4) }, card)
+		UI.corner(bar, 2)
+		UI.label(card, { Text = tostring(text), TextWrapped = true, TextSize = 13, AutomaticSize = Enum.AutomaticSize.Y, Size = UDim2.new(1, 0, 0, 19) })
+		local kids = {}
+		for _, child in ipairs(Toasts.holder:GetChildren()) do
+			if child:IsA("Frame") then
+				table.insert(kids, child)
+			end
+		end
+		if #kids > 4 then
+			table.sort(kids, function(a, b)
+				return a.LayoutOrder < b.LayoutOrder
+			end)
+			kids[1]:Destroy()
+		end
+		task.delay(duration or 4, function()
+			if card.Parent then
+				card:Destroy()
+			end
 		end)
+	end
+	function UI.notify(text)
+		UI.toast(text, 4)
+	end
+	function UI.keyFrom(value)
+		if typeof(value) == "EnumItem" then
+			return value
+		end
+		if type(value) ~= "string" or value == "" or value == "None" then
+			return nil
+		end
+		local kind, name = value:match("^(%w+)%.(%w+)$")
+		if not kind then
+			kind, name = "KeyCode", value
+		end
+		local ok, item = pcall(function()
+			return Enum[kind][name]
+		end)
+		return ok and item or nil
+	end
+	function UI.keyLabel(key)
+		if typeof(key) ~= "EnumItem" then
+			return "None"
+		end
+		local short = { MouseButton1 = "Mouse 1", MouseButton2 = "Mouse 2", MouseButton3 = "Mouse 3", RightControl = "Right Ctrl", LeftControl = "Left Ctrl",
+			RightShift = "Right Shift", LeftShift = "Left Shift", LeftAlt = "Left Alt", RightAlt = "Right Alt" }
+		return short[key.Name] or key.Name
+	end
+	function UI.keyMatches(input, key)
+		return typeof(key) == "EnumItem" and (input.KeyCode == key or input.UserInputType == key)
 	end
 	function UI.modePill(parent, move, props)
 		if move.off then
 			return UI.pill(parent, "off", UI.T("Muted"), props)
 		end
-		return UI.pill(parent, UI.MODE_LABEL[move.mode] .. (move.press == "hold" and " · hold" or ""), UI.mode(), props)
+		local press = move.press == "hold" and " · hold" or (move.press == "dodge" and " · dodge" or "")
+		return UI.pill(parent, UI.MODE_LABEL[move.mode] .. press, UI.mode(), props)
 	end
 	function UI.statPill(parent, id, props)
 		local stat = AP.stats and AP.stats[id]
@@ -555,8 +617,8 @@ return function(env)
 		UI.label(word, { Text = "exori", FontFace = UI.BOLD, TextSize = 17, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 18), LayoutOrder = 2 })
 		UI.label(left, { Text = "/", TextColor3 = UI.T("BorderLight"), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 16), LayoutOrder = 2 })
 		UI.label(left, { Text = "AP Builder", TextColor3 = UI.T("SubText"), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 16), LayoutOrder = 3 })
-		s.paintTab = UI.segmented(bar, { { "auto", "Auto" }, { "manual", "Manual" }, { "moves", "Moves" } },
-			{ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.fromOffset(276, 30) }, function(tab)
+		s.paintTab = UI.segmented(bar, { { "parry", "Auto Parry" }, { "auto", "Auto" }, { "manual", "Manual" }, { "moves", "Moves" } },
+			{ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.fromOffset(396, 30) }, function(tab)
 				B.tab = tab
 				s.refresh()
 			end)
@@ -629,8 +691,10 @@ return function(env)
 				TextTruncate = Enum.TextTruncate.AtEnd })
 			ui.why = UI.label(ui.best, { TextColor3 = UI.T("SubText"), TextSize = 12, Position = UDim2.fromOffset(16, 59), Size = UDim2.new(1, -32, 0, 16),
 				TextTruncate = Enum.TextTruncate.AtEnd })
-			ui.othersHead = UI.heading(d, "OTHER WAYS  ·  click one to use it instead", 278, 16)
-			ui.others = UI.new("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(16, 300), Size = UDim2.new(1, -32, 0, 104), ClipsDescendants = true }, d)
+			ui.soundsHead = UI.heading(d, "SOUNDS", 276, 16)
+			ui.sounds = UI.wrap(d, { Position = UDim2.fromOffset(16, 296), Size = UDim2.new(1, -32, 0, 24) })
+			ui.othersHead = UI.heading(d, "OTHER WAYS  ·  click one to use it instead", 332, 16)
+			ui.others = UI.new("Frame", { BackgroundTransparency = 1, Position = UDim2.fromOffset(16, 352), Size = UDim2.new(1, -32, 0, 56), ClipsDescendants = true }, d)
 			UI.new("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder }, ui.others)
 			UI.new("Frame", { BackgroundColor3 = UI.T("Divider"), BorderSizePixel = 0, Position = UDim2.new(0, 14, 1, -112), Size = UDim2.new(1, -28, 0, 1) }, d)
 			ui.save = UI.primary(d, "Save Setup", { Position = UDim2.new(0, 16, 1, -96), Size = UDim2.fromOffset(132, 32) })
@@ -644,7 +708,7 @@ return function(env)
 		do
 			local y = 0
 			if Settings.preview then
-				local prev = UI.panel(manual, 0, 0, RW, 232)
+				local prev = UI.panel(manual, 0, 0, RW, 196)
 				ui.viewport = UI.new("ViewportFrame", { BackgroundColor3 = UI.T("Field"), Ambient = Color3.fromRGB(150, 150, 160), LightColor = Color3.fromRGB(255, 250, 240),
 					LightDirection = Vector3.new(-0.5, -1, -0.4), Position = UDim2.fromOffset(8, 8), Size = UDim2.new(1, -16, 1, -16) }, prev)
 				UI.corner(ui.viewport, 8)
@@ -654,7 +718,7 @@ return function(env)
 				UI.label(ui.viewport, { Text = "drag to orbit · scroll to zoom", TextColor3 = UI.T("Muted"), TextSize = 11, TextXAlignment = Enum.TextXAlignment.Right,
 					AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -10, 1, -8), Size = UDim2.fromOffset(200, 16) })
 				ui.noRec = UI.label(ui.viewport, { TextColor3 = UI.T("Muted"), TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Center, Size = UDim2.fromScale(1, 1) })
-				y = 240
+				y = 204
 			end
 			local tl = UI.panel(manual, 0, y, RW, 96)
 			ui.mTitle = UI.label(tl, { FontFace = UI.SEMI, TextSize = 14, Position = UDim2.fromOffset(14, 9), Size = UDim2.new(1, -330, 0, 20),
@@ -687,10 +751,18 @@ return function(env)
 			ui.modeHelp = UI.label(setup, { TextColor3 = UI.T("Muted"), TextSize = 12, Position = UDim2.fromOffset(366, 52), Size = UDim2.new(1, -378, 0, 30),
 				TextTruncate = Enum.TextTruncate.AtEnd })
 			UI.label(setup, { Text = "Press", TextColor3 = UI.T("SubText"), TextSize = 12, Position = UDim2.fromOffset(12, 92), Size = UDim2.fromOffset(44, 30) })
-			ui.inputs = UI.row(setup, { Position = UDim2.fromOffset(206, 92), Size = UDim2.new(1, -218, 0, 30) }, 8)
-			ui.mNudge = UI.row(setup, { Position = UDim2.fromOffset(12, 132), Size = UDim2.new(1, -150, 0, 30) }, 4)
-			ui.delete = UI.danger(setup, "Delete Move", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 132), Size = UDim2.fromOffset(104, 30), TextSize = 12 })
-			ui.mStatus = UI.row(setup, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -124, 0, 137), Size = UDim2.fromOffset(240, 20) }, 5, Enum.HorizontalAlignment.Right)
+			ui.inputs = UI.row(setup, { Position = UDim2.fromOffset(276, 92), Size = UDim2.new(1, -288, 0, 30) }, 8)
+			UI.label(setup, { Text = "Hitbox", TextColor3 = UI.T("SubText"), TextSize = 12, Position = UDim2.fromOffset(12, 132), Size = UDim2.fromOffset(44, 30) })
+			ui.boxInfo = UI.label(setup, { TextColor3 = UI.T("Muted"), TextSize = 12, Position = UDim2.fromOffset(60, 132), Size = UDim2.fromOffset(200, 30),
+				TextTruncate = Enum.TextTruncate.AtEnd })
+			ui.boxFit = UI.button(setup, "Learn", { Position = UDim2.fromOffset(262, 133), Size = UDim2.fromOffset(56, 28), TextSize = 12 })
+			ui.boxClear = UI.button(setup, "Off", { Position = UDim2.fromOffset(322, 133), Size = UDim2.fromOffset(44, 28), TextSize = 12 })
+			UI.label(setup, { Text = "Sound", TextColor3 = UI.T("SubText"), TextSize = 12, Position = UDim2.fromOffset(386, 132), Size = UDim2.fromOffset(44, 30) })
+			ui.soundPick = UI.button(setup, "any", { Position = UDim2.fromOffset(432, 133), Size = UDim2.new(1, -444, 0, 28), TextSize = 12, FontFace = UI.MONO,
+				TextTruncate = Enum.TextTruncate.AtEnd })
+			ui.mNudge = UI.row(setup, { Position = UDim2.fromOffset(12, 172), Size = UDim2.new(1, -150, 0, 30) }, 4)
+			ui.delete = UI.danger(setup, "Delete Move", { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 172), Size = UDim2.fromOffset(104, 30), TextSize = 12 })
+			ui.mStatus = UI.row(setup, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -124, 0, 177), Size = UDim2.fromOffset(240, 20) }, 5, Enum.HorizontalAlignment.Right)
 			local function labeled(text, placeholder, order, width)
 				local holder = UI.row(ui.inputs, { AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 30), LayoutOrder = order }, 6)
 				UI.label(holder, { Text = text, TextColor3 = UI.T("SubText"), TextSize = 12, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 30), LayoutOrder = 1 })
@@ -721,7 +793,7 @@ return function(env)
 					AP.changed(entry.id)
 					s.refresh()
 				end)
-			s.paintPress = UI.segmented(setup, { { "tap", "Tap" }, { "hold", "Hold" } }, { Position = UDim2.fromOffset(56, 92), Size = UDim2.fromOffset(140, 30) },
+			s.paintPress = UI.segmented(setup, { { "tap", "Tap" }, { "hold", "Hold" }, { "dodge", "Dodge" } }, { Position = UDim2.fromOffset(56, 92), Size = UDim2.fromOffset(210, 30) },
 				function(value)
 					local entry = entryFor(B.selected)
 					if not entry then
@@ -754,6 +826,47 @@ return function(env)
 			numberInto(ui.baseBox, "base", 1, 0, 30)
 			numberInto(ui.perBox, "perStud", 0.001, 0, 1)
 			numberInto(ui.holdBox, "hold", 1, 30, 5000, true)
+			ui.boxFit.MouseButton1Click:Connect(function()
+				local entry = entryFor(B.selected)
+				local box, n = AP.fitBox(entry and entry.hits or {})
+				if not box then
+					return UI.notify("Get hit by it first so it can learn where it reaches")
+				end
+				local move = AP.moveOf(entry.id, entry.name)
+				move.box = box
+				AP.changed(entry.id)
+				UI.notify(string.format("Learned the hitbox from %d hit%s", n, n == 1 and "" or "s"))
+				s.refresh()
+			end)
+			ui.boxClear.MouseButton1Click:Connect(function()
+				local move = B.selected and AP.moves[B.selected]
+				if move then
+					move.box = nil
+					AP.changed(B.selected)
+					s.refresh()
+				end
+			end)
+			ui.soundPick.MouseButton1Click:Connect(function()
+				local entry = entryFor(B.selected)
+				if not entry then
+					return
+				end
+				local cues = AP.soundCues(entry)
+				if #cues == 0 then
+					return UI.notify("No sounds heard from this move yet. Watch it play with this open.")
+				end
+				local move = AP.moveOf(entry.id, entry.name)
+				local at = 0
+				for i, c in ipairs(cues) do
+					if c.id == move.sound then
+						at = i
+					end
+				end
+				local nextCue = cues[at + 1]
+				move.sound = nextCue and nextCue.id or nil
+				AP.changed(entry.id)
+				s.refresh()
+			end)
 		end
 
 		local moves = tabFrame("moves", true)
@@ -774,6 +887,131 @@ return function(env)
 			ui.importOpen = UI.primary(ui.mvActions, "Import", { Size = UDim2.fromOffset(90, 30), TextSize = 12, LayoutOrder = 3 })
 		end
 
+		local parry = tabFrame("parry", true)
+		s.optionPaint = {}
+		local function keyChip(parent, props, getValue, setValue)
+			local chip = UI.button(parent, UI.keyLabel(getValue()), props)
+			chip.FontFace = UI.MONO
+			chip.TextSize = 12
+			local function paint()
+				if B.picking and B.picking.chip == chip then
+					chip.Text = "press a key…"
+					chip.TextColor3 = UI.T("Accent")
+				else
+					chip.Text = UI.keyLabel(getValue())
+					chip.TextColor3 = typeof(getValue()) == "EnumItem" and UI.T("Text") or UI.T("Muted")
+				end
+			end
+			chip.MouseButton1Click:Connect(function()
+				if B.picking and B.picking.chip == chip then
+					return
+				end
+				local old = B.picking
+				B.picking = { chip = chip, set = setValue, paint = paint, at = os.clock() }
+				if old and old.paint then
+					pcall(old.paint)
+				end
+				paint()
+			end)
+			paint()
+			return chip, paint
+		end
+		s.keyChip = keyChip
+		local function optionRow(panel, option, y, width)
+			local spec = option.Spec or {}
+			local row = UI.new("Frame", { BackgroundColor3 = UI.T("Panel"), Position = UDim2.fromOffset(12, y), Size = UDim2.fromOffset(width - 24, 48) }, panel)
+			UI.corner(row, 8)
+			UI.stroke(row, UI.T("Border"))
+			UI.label(row, { Text = spec.Text or option.Id, FontFace = UI.SEMI, TextSize = 13, Position = UDim2.fromOffset(14, 7), Size = UDim2.new(1, -220, 0, 18),
+				TextTruncate = Enum.TextTruncate.AtEnd })
+			UI.label(row, { Text = spec.Desc or "", TextColor3 = UI.T("Muted"), TextSize = 11, Position = UDim2.fromOffset(14, 25), Size = UDim2.new(1, -220, 0, 15),
+				TextTruncate = Enum.TextTruncate.AtEnd })
+			local paint
+			if option.Type == "Toggle" then
+				local switch = UI.new("TextButton", { AutoButtonColor = false, Text = "", AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -14, 0.5, 0),
+					Size = UDim2.fromOffset(38, 20) }, row)
+				UI.corner(switch, 10)
+				local edge = UI.stroke(switch)
+				local knob = UI.new("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(14, 14) }, switch)
+				UI.corner(knob, 7)
+				paint = function()
+					local on = option.Value == true
+					switch.BackgroundColor3 = on and UI.T("Accent") or UI.T("Field")
+					edge.Color = on and UI.T("Accent") or UI.T("BorderLight")
+					knob.BackgroundColor3 = on and UI.WHITE or UI.T("Muted")
+					knob.Position = UDim2.new(0, on and 28 or 10, 0.5, 0)
+				end
+				switch.MouseButton1Click:Connect(function()
+					option:SetValue(not option.Value)
+					paint()
+					s.drawFoot()
+				end)
+			elseif option.Type == "Slider" then
+				local value = UI.label(row, { FontFace = UI.MONO, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Right, AnchorPoint = Vector2.new(1, 0.5),
+					Position = UDim2.new(1, -14, 0.5, 0), Size = UDim2.fromOffset(62, 18) })
+				local track = UI.new("TextButton", { AutoButtonColor = false, Text = "", BackgroundColor3 = UI.T("Field"), AnchorPoint = Vector2.new(1, 0.5),
+					Position = UDim2.new(1, -84, 0.5, 0), Size = UDim2.fromOffset(120, 6) }, row)
+				UI.corner(track, 3)
+				UI.stroke(track, UI.T("BorderLight"))
+				local fill = UI.new("Frame", { BackgroundColor3 = UI.T("Accent"), BorderSizePixel = 0, Size = UDim2.fromScale(0, 1) }, track)
+				UI.corner(fill, 3)
+				local knob = UI.new("Frame", { BackgroundColor3 = UI.WHITE, AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(12, 12), ZIndex = 2 }, track)
+				UI.corner(knob, 6)
+				paint = function()
+					local frac = (option.Value - spec.Min) / math.max(spec.Max - spec.Min, 1e-6)
+					frac = math.clamp(frac, 0, 1)
+					fill.Size = UDim2.fromScale(frac, 1)
+					knob.Position = UDim2.new(frac, 0, 0.5, 0)
+					local digits = spec.Rounding or 0
+					value.Text = string.format("%." .. digits .. "f", option.Value) .. (spec.Suffix or "")
+				end
+				local function setFrom(x)
+					local frac = math.clamp((x - track.AbsolutePosition.X) / math.max(track.AbsoluteSize.X, 1), 0, 1)
+					option:SetValue(spec.Min + frac * (spec.Max - spec.Min))
+					paint()
+				end
+				track.InputBegan:Connect(function(input)
+					if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+						s.sliding = setFrom
+						setFrom(input.Position.X)
+					end
+				end)
+			elseif option.Type == "Keybind" then
+				local _, chipPaint = keyChip(row, { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(110, 28) },
+					function()
+						return option.Value
+					end, function(key)
+						option:SetValue(key)
+					end)
+				paint = chipPaint
+			end
+			if paint then
+				paint()
+				s.optionPaint[option.Id] = paint
+			end
+		end
+		do
+			local half = math.floor((W - 24 - 10) / 2)
+			local function section(x, title, sub, key)
+				local panel = UI.panel(parry, x, 0, half, BODY)
+				UI.label(panel, { Text = title, FontFace = UI.SEMI, TextSize = 15, Position = UDim2.fromOffset(16, 14), Size = UDim2.new(1, -32, 0, 20) })
+				UI.label(panel, { Text = sub, TextColor3 = UI.T("Muted"), TextSize = 12, Position = UDim2.fromOffset(16, 35), Size = UDim2.new(1, -32, 0, 16) })
+				local rule = UI.new("Frame", { BackgroundColor3 = UI.T("BorderLight"), BorderSizePixel = 0, Position = UDim2.fromOffset(14, 60), Size = UDim2.new(1, -28, 0, 1) }, panel)
+				UI.new("UIGradient", { Transparency = NumberSequence.new(0, 1) }, rule)
+				local y = 72
+				for _, entry in ipairs(AP.SPEC or {}) do
+					local option = Options[entry[1]]
+					if option and (option.Spec or entry[2]).Section == key then
+						optionRow(panel, option, y, half)
+						y += 56
+					end
+				end
+				return panel
+			end
+			section(0, "Auto Parry", "Inputs and timing", "main")
+			section(half + 10, "Checks", "When it's allowed to block", "checks")
+		end
+
 		ui.shade = UI.new("TextButton", { AutoButtonColor = false, Text = "", BackgroundColor3 = Color3.new(0, 0, 0), BackgroundTransparency = 0.45,
 			Size = UDim2.fromScale(1, 1), Visible = false, ZIndex = 20 }, win)
 		UI.corner(ui.shade, 12)
@@ -790,7 +1028,7 @@ return function(env)
 		ui.cancel = UI.button(ui.pop, "Cancel", { AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -114, 1, -14), Size = UDim2.fromOffset(80, 30), ZIndex = 22 })
 
 		ui.settings = UI.new("Frame", { BackgroundColor3 = UI.T("Chrome"), Visible = false, AnchorPoint = Vector2.new(1, 0), Position = UDim2.new(1, -12, 0, 48),
-			Size = UDim2.fromOffset(300, 272), ZIndex = 30 }, win)
+			Size = UDim2.fromOffset(350, 322), ZIndex = 30 }, win)
 		UI.corner(ui.settings, 10)
 		UI.stroke(ui.settings)
 		UI.label(ui.settings, { Text = "Builder Settings", FontFace = UI.SEMI, TextSize = 14, Position = UDim2.fromOffset(14, 10), Size = UDim2.new(1, -28, 0, 20), ZIndex = 31 })
@@ -798,7 +1036,7 @@ return function(env)
 		local function setting(order, text, key, items, rebuild)
 			local y = 40 + (order - 1) * 40
 			UI.label(ui.settings, { Text = text, TextColor3 = UI.T("SubText"), TextSize = 12, Position = UDim2.fromOffset(14, y), Size = UDim2.fromOffset(100, 30), ZIndex = 31 })
-			local paint = UI.segmented(ui.settings, items, { Position = UDim2.fromOffset(112, y), Size = UDim2.fromOffset(174, 30), ZIndex = 31 }, function(value)
+			local paint = UI.segmented(ui.settings, items, { Position = UDim2.fromOffset(112, y), Size = UDim2.fromOffset(224, 30), ZIndex = 31 }, function(value)
 				Settings[key] = value
 				saveSettings()
 				if rebuild then
@@ -814,8 +1052,24 @@ return function(env)
 		setting(2, "3D Preview", "preview", { { true, "On" }, { false, "Off" } }, true)
 		setting(3, "List Rows", "compact", { { false, "Roomy" }, { true, "Compact" } }, true)
 		setting(4, "Nudge Step", "nudge", { { 10, "10 ms" }, { 20, "20 ms" }, { 50, "50 ms" } })
-		setting(5, "Opens On", "tab", { { "auto", "Auto" }, { "manual", "Manual" }, { "moves", "Moves" } })
+		setting(5, "Opens On", "tab", { { "parry", "Parry" }, { "auto", "Auto" }, { "manual", "Manual" }, { "moves", "Moves" } })
+		UI.label(ui.settings, { Text = "Hide Key", TextColor3 = UI.T("SubText"), TextSize = 12, Position = UDim2.fromOffset(14, 240), Size = UDim2.fromOffset(100, 30) })
+		local _, hidePaint = keyChip(ui.settings, { Position = UDim2.fromOffset(112, 241), Size = UDim2.fromOffset(120, 28) }, function()
+			return UI.keyFrom(Settings.hideKey)
+		end, function(key)
+			Settings.hideKey = typeof(key) == "EnumItem" and (tostring(key.EnumType) .. "." .. key.Name) or "None"
+			saveSettings()
+		end)
+		s.hidePaint = hidePaint
 		ui.reset = UI.button(ui.settings, "Reset", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 14, 1, -12), Size = UDim2.fromOffset(70, 26), TextSize = 12 })
+		ui.unload = UI.danger(ui.settings, "Unload Script", { AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -14, 1, -12), Size = UDim2.fromOffset(110, 26), TextSize = 12 })
+		ui.unload.MouseButton1Click:Connect(function()
+			if Library and type(Library.Unload) == "function" then
+				Library:Unload()
+			else
+				B.destroy()
+			end
+		end)
 		ui.reset.MouseButton1Click:Connect(function()
 			for key, value in pairs(DEFAULTS) do
 				Settings[key] = value
@@ -826,6 +1080,9 @@ return function(env)
 		function s.paintSettings()
 			for key, paint in pairs(s.settingPaint) do
 				paint(Settings[key])
+			end
+			if s.hidePaint then
+				s.hidePaint()
 			end
 		end
 
@@ -870,8 +1127,26 @@ return function(env)
 				UI.label(row, { Text = (entry.who and (tostring(entry.who) .. "  ·  ") or "") .. entry.id, TextColor3 = UI.T("Muted"), TextSize = 11,
 					Position = UDim2.fromOffset(12, 24), Size = UDim2.new(1, -110, 0, 15), TextTruncate = Enum.TextTruncate.AtEnd })
 			end
-			local holder = UI.row(row, { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -10, 0.5, 0), Size = UDim2.fromOffset(100, 20) }, 4,
+			local logged = AP.logged[entry.id] ~= nil
+			local holder = UI.row(row, { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, logged and -34 or -10, 0.5, 0), Size = UDim2.fromOffset(100, 20) }, 4,
 				Enum.HorizontalAlignment.Right)
+			if logged then
+				local x = UI.new("TextButton", { AutoButtonColor = false, BackgroundTransparency = 1, Text = "×", FontFace = UI.SEMI, TextSize = 17,
+					TextColor3 = UI.T("Muted"), AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -6, 0.5, 0), Size = UDim2.fromOffset(22, 22), Name = "Remove" }, row)
+				x.MouseEnter:Connect(function()
+					x.TextColor3 = UI.T("Text")
+				end)
+				x.MouseLeave:Connect(function()
+					x.TextColor3 = UI.T("Muted")
+				end)
+				x.MouseButton1Click:Connect(function()
+					AP.forget(entry.id)
+					if B.selected == entry.id then
+						B.selected = nil
+					end
+					s.refresh()
+				end)
+			end
 			if move and AP.isUsed(move) then
 				UI.modePill(holder, move)
 			elseif #entry.hits > 0 then
@@ -966,6 +1241,30 @@ return function(env)
 				UI.label(ui.aHits, { Text = "No hits yet. Let it hit you a few times.", TextColor3 = UI.T("Muted"), TextSize = 12, AutomaticSize = Enum.AutomaticSize.X,
 					Size = UDim2.fromOffset(0, 22) })
 			end
+			UI.clear(ui.sounds)
+			local cues = result.sounds or AP.soundCues(entry)
+			local current = AP.moves[entry.id] and AP.moves[entry.id].sound
+			ui.soundsHead.Text = #cues == 0 and "SOUNDS  ·  none heard from them during this move yet"
+				or "SOUNDS  ·  click one so it only blocks when that sound plays"
+			for i, cue in ipairs(cues) do
+				if i > 6 then
+					break
+				end
+				local on = current == cue.id
+				local chip = UI.new("TextButton", { AutoButtonColor = false, BackgroundColor3 = on and UI.T("Accent") or UI.T("Field"), FontFace = UI.MONO, TextSize = 11,
+					TextColor3 = on and Color3.new(1, 1, 1) or UI.T("SubText"),
+					Text = string.format("%s · %s s · %d/%d", cue.name or cue.id, UI.fmt(cue.t), cue.seen, cue.plays),
+					AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 22), LayoutOrder = i }, ui.sounds)
+				UI.corner(chip, 11)
+				UI.stroke(chip, on and UI.T("Accent") or UI.T("BorderLight"))
+				UI.pad(chip, 8, 8)
+				chip.MouseButton1Click:Connect(function()
+					local move = AP.moveOf(entry.id, entry.name)
+					move.sound = (move.sound ~= cue.id) and cue.id or nil
+					AP.changed(entry.id)
+					s.refresh()
+				end)
+			end
 			local option = nil
 			if s.chosen then
 				for _, o in ipairs(result.options) do
@@ -984,6 +1283,9 @@ return function(env)
 				UI.pill(ui.bestPills, UI.MODE_LABEL[option.mode], modeColor, { LayoutOrder = 1 })
 				UI.pill(ui.bestPills, text, color, { LayoutOrder = 2 })
 				UI.pill(ui.bestPills, option.score .. "%", UI.T("SubText"), { LayoutOrder = 3 })
+				if option.box then
+					UI.pill(ui.bestPills, "hitbox from " .. (result.boxHits or 0) .. " hit" .. ((result.boxHits or 0) == 1 and "" or "s"), UI.T("Accent"), { LayoutOrder = 4 })
+				end
 				ui.bestLabel.Text = option.label
 				ui.why.Text = option.why
 				ui.bestEdge.Color = modeColor:Lerp(UI.T("BorderLight"), 0.45)
@@ -1180,6 +1482,26 @@ return function(env)
 			if not ui.holdBox:IsFocused() then
 				ui.holdBox.Text = move and move.hold and tostring(move.hold) or ""
 			end
+			if move and move.box then
+				local b = move.box
+				ui.boxInfo.Text = string.format("%.0f × %.0f × %.0f st, only blocks inside it", b[4] - b[1], b[5] - b[2], b[6] - b[3])
+				ui.boxInfo.TextColor3 = UI.T("Text")
+			else
+				local _, n = AP.fitBox(entry and entry.hits or {})
+				ui.boxInfo.Text = n > 0 and string.format("off · %d hit%s to learn from", n, n == 1 and "" or "s") or "off · uses Max Range"
+				ui.boxInfo.TextColor3 = UI.T("Muted")
+			end
+			ui.boxFit.Visible = entry ~= nil
+			ui.boxClear.Visible = move ~= nil and move.box ~= nil
+			local cue = move and move.sound
+			local cueName = cue
+			for _, c in ipairs(entry and AP.soundCues(entry) or {}) do
+				if c.id == cue then
+					cueName = c.name or c.id
+				end
+			end
+			ui.soundPick.Text = cue and ("needs " .. tostring(cueName)) or "any (click to pick)"
+			ui.soundPick.Visible = entry ~= nil
 			ui.useHits.Visible = entry ~= nil and #entry.hits > 0
 			ui.chips.Position = UDim2.fromOffset(ui.useHits.Visible and 252 or 164, 12)
 			ui.clearTimes.Visible = move ~= nil and #move.t > 0
@@ -1230,7 +1552,8 @@ return function(env)
 						table.insert(times, UI.fmt(t))
 					end
 				end
-				UI.label(row, { Text = table.concat(times, ", ") .. (r.move.mode == "dash" and string.format("  ·  %d st", r.move.close or 10) or ""),
+				UI.label(row, { Text = table.concat(times, ", ") .. (r.move.mode == "dash" and string.format("  ·  %d st", r.move.close or 10) or "")
+					.. (r.move.box and "  ·  hitbox" or "") .. (r.move.sound and "  ·  sound" or ""),
 					FontFace = UI.MONO, TextSize = 11, TextColor3 = UI.T("SubText"), Position = UDim2.new(0.4, 0, 0, 0), Size = UDim2.new(0.6, -250, 1, 0),
 					TextTruncate = Enum.TextTruncate.AtEnd })
 				local holder = UI.row(row, { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -8, 0.5, 0), Size = UDim2.fromOffset(240, 24) }, 6,
@@ -1287,7 +1610,9 @@ return function(env)
 			if AP.readOnly then
 				UI.pill(ui.foot, "not saving: file unreadable", UI.T("Text"), { LayoutOrder = 4 })
 			end
-			if B.tab == "manual" then
+			if B.tab == "parry" then
+				ui.hint.Text = "settings save automatically  ·  " .. UI.keyLabel(UI.keyFrom(Settings.hideKey)) .. " hides this"
+			elseif B.tab == "manual" then
 				ui.hint.Text = "B marks a block  ·  ← → step a frame"
 			elseif B.tab == "auto" then
 				ui.hint.Text = "logging while this is open"
@@ -1305,11 +1630,15 @@ return function(env)
 			for name, frame in pairs(s.tabs) do
 				frame.Visible = name == B.tab
 			end
-			side.Visible = B.tab ~= "moves"
-			if B.tab ~= "moves" then
+			side.Visible = B.tab ~= "moves" and B.tab ~= "parry"
+			if side.Visible then
 				s.drawList()
 			end
-			if B.tab == "auto" then
+			if B.tab == "parry" then
+				for _, paint in pairs(s.optionPaint) do
+					pcall(paint)
+				end
+			elseif B.tab == "auto" then
 				s.drawAuto()
 			elseif B.tab == "manual" then
 				s.drawManual()
@@ -1321,6 +1650,7 @@ return function(env)
 
 		ui.close.MouseButton1Click:Connect(function()
 			B.close()
+			UI.notify("AP Builder hidden. Press " .. UI.keyLabel(UI.keyFrom(Settings.hideKey)) .. " to show it again.")
 		end)
 		ui.gear.MouseButton1Click:Connect(function()
 			ui.settings.Visible = not ui.settings.Visible
@@ -1467,7 +1797,9 @@ return function(env)
 			if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then
 				return
 			end
-			if dragFrom then
+			if s.sliding then
+				s.sliding(input.Position.X)
+			elseif dragFrom then
 				local d = input.Position - dragFrom
 				root.Position = UDim2.fromOffset(dragPos.X.Offset + d.X, dragPos.Y.Offset + d.Y)
 				B.pos = root.Position
@@ -1484,11 +1816,34 @@ return function(env)
 		end))
 		table.insert(s.conns, UserInputService.InputEnded:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-				s.scrubbing, s.orbitFrom, dragFrom = false, nil, nil
+				s.scrubbing, s.orbitFrom, dragFrom, s.sliding = false, nil, nil, nil
 			end
 		end))
+		table.insert(s.conns, UserInputService.InputBegan:Connect(function(input)
+			local pick = B.picking
+			if not pick or os.clock() - pick.at < 0.05 then
+				return
+			end
+			local key = nil
+			if input.KeyCode == Enum.KeyCode.Escape or input.KeyCode == Enum.KeyCode.Backspace then
+				key = false
+			elseif input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode ~= Enum.KeyCode.Unknown then
+				key = input.KeyCode
+			elseif input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.MouseButton2
+				or input.UserInputType == Enum.UserInputType.MouseButton3 then
+				key = input.UserInputType
+			end
+			if key == nil then
+				return
+			end
+			B.picking = nil
+			B.lastPickInput = input
+			pcall(pick.set, key or nil)
+			pcall(pick.paint)
+			s.drawFoot()
+		end))
 		table.insert(s.conns, UserInputService.InputBegan:Connect(function(input, processed)
-			if processed or UserInputService:GetFocusedTextBox() or B.tab ~= "manual" then
+			if processed or UserInputService:GetFocusedTextBox() or B.tab ~= "manual" or B.picking or input == B.lastPickInput then
 				return
 			end
 			local entry = entryFor(B.selected)
@@ -1644,6 +1999,7 @@ return function(env)
 		local s = S
 		S = nil
 		s.alive = false
+		B.picking = nil
 		B.playing = false
 		AP.builderOpen = false
 		pcall(function()
@@ -1697,8 +2053,34 @@ return function(env)
 			B.t = t
 		end
 	end
+	function B.notify(text, duration)
+		UI.toast(text, duration)
+	end
+	function B.isPicking(input)
+		return B.picking ~= nil or (input ~= nil and input == B.lastPickInput)
+	end
+	function B.hideKeyName()
+		return UI.keyLabel(UI.keyFrom(Settings.hideKey))
+	end
+	B.hideConn = UserInputService.InputBegan:Connect(function(input)
+		if B.isPicking(input) or UserInputService:GetFocusedTextBox() then
+			return
+		end
+		if UI.keyMatches(input, UI.keyFrom(Settings.hideKey)) then
+			B.toggle()
+		end
+	end)
 	function B.destroy()
+		B.picking = nil
 		B.close()
+		if B.hideConn then
+			B.hideConn:Disconnect()
+			B.hideConn = nil
+		end
+		if Toasts.gui then
+			Toasts.gui:Destroy()
+			Toasts.gui = nil
+		end
 	end
 	return B
 end
