@@ -37,7 +37,9 @@ return function(env)
 		range = "Base + ms per stud of distance.",
 	}
 
-	local SETTINGS_FILE = "Dexori/Universal/ap_builder.json"
+	local FOLDER = type(env.Folder) == "string" and env.Folder or "Dexori/Universal"
+	local TITLE = type(env.Title) == "string" and env.Title or "AP Builder"
+	local SETTINGS_FILE = FOLDER .. "/ap_builder.json"
 	local DEFAULTS = { scale = 1, preview = true, compact = false, tab = "parry", nudge = 20, hideKey = "RightControl" }
 	local Settings = table.clone(DEFAULTS)
 	pcall(function()
@@ -61,7 +63,7 @@ return function(env)
 	end
 	local function saveSettings()
 		pcall(function()
-			for _, folder in ipairs({ "Dexori", "Dexori/Universal" }) do
+			for _, folder in ipairs({ "Dexori", FOLDER }) do
 				if not isfolder(folder) then
 					makefolder(folder)
 				end
@@ -333,7 +335,11 @@ return function(env)
 		end
 		local good = stat.blocks - math.min(stat.misses or 0, stat.blocks)
 		local color = (stat.misses or 0) == 0 and UI.T("Accent") or UI.T("SubText")
-		return UI.pill(parent, string.format("parried %d/%d", good, stat.blocks), color, props)
+		local text = string.format("parried %d/%d", good, stat.blocks)
+		if (stat.perfects or 0) > 0 then
+			text ..= string.format(" · %d perfect", stat.perfects)
+		end
+		return UI.pill(parent, text, color, props)
 	end
 	function UI.gui()
 		local ok, hui = pcall(function()
@@ -616,7 +622,7 @@ return function(env)
 		UI.label(word, { Text = "d", FontFace = UI.BOLD, TextSize = 17, TextColor3 = UI.T("Accent"), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 18), LayoutOrder = 1 })
 		UI.label(word, { Text = "exori", FontFace = UI.BOLD, TextSize = 17, AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 18), LayoutOrder = 2 })
 		UI.label(left, { Text = "/", TextColor3 = UI.T("BorderLight"), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 16), LayoutOrder = 2 })
-		UI.label(left, { Text = "AP Builder", TextColor3 = UI.T("SubText"), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 16), LayoutOrder = 3 })
+		UI.label(left, { Text = TITLE, TextColor3 = UI.T("SubText"), AutomaticSize = Enum.AutomaticSize.X, Size = UDim2.fromOffset(0, 16), LayoutOrder = 3 })
 		s.paintTab = UI.segmented(bar, { { "parry", "Auto Parry" }, { "auto", "Auto" }, { "manual", "Manual" }, { "moves", "Moves" } },
 			{ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0.5, 0), Size = UDim2.fromOffset(396, 30) }, function(tab)
 				B.tab = tab
@@ -1681,6 +1687,12 @@ return function(env)
 			end
 			if AP.fileName then
 				UI.pill(ui.foot, "file: " .. AP.fileName, UI.T("Accent"), { LayoutOrder = 5 })
+			end
+			if type(AP.footPills) == "function" then
+				local ok, pills = pcall(AP.footPills)
+				for i, pill in ipairs(ok and type(pills) == "table" and pills or {}) do
+					UI.pill(ui.foot, tostring(pill.text), pill.accent and UI.T("Accent") or UI.T("SubText"), { LayoutOrder = 5 + i })
+				end
 			end
 			if B.tab == "parry" then
 				ui.hint.Text = "settings save automatically  ·  " .. UI.keyLabel(UI.keyFrom(Settings.hideKey)) .. " hides this"
