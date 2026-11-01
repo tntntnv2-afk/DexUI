@@ -845,6 +845,9 @@ local function newOption(id, kind, opts)
 		for _, fn in ipairs(self.Changed) do
 			fire(fn, self.Value)
 		end
+		if Library._changed then
+			Library:_changed(self)
+		end
 	end
 	if id then
 		if Library.Options[id] then
@@ -930,6 +933,9 @@ local function newKeybind(id, opts, parent, position, onPress, onRelease, meta)
 			fire(fn, self.Value)
 		end
 		refreshKeybinds()
+		if Library._changed then
+			Library:_changed(self)
+		end
 	end
 
 	Chip.MouseButton1Click:Connect(function()
@@ -946,7 +952,7 @@ local function newKeybind(id, opts, parent, position, onPress, onRelease, meta)
 				option:SetValue(input.KeyCode ~= Enum.KeyCode.Escape and input.KeyCode or nil)
 			elseif kind == Enum.UserInputType.MouseButton2 or kind == Enum.UserInputType.MouseButton3 then
 				option:SetValue(kind)
-			elseif kind ~= Enum.UserInputType.MouseButton1 then
+			elseif kind ~= Enum.UserInputType.MouseButton1 and kind ~= Enum.UserInputType.Touch then
 				return
 			end
 			picking = false
@@ -1310,6 +1316,9 @@ local function attachColorPicker(group, slotParent, id, opts)
 		fire(self.Callback, self.Value, self.Transparency)
 		for _, fn in ipairs(self.Changed) do
 			fire(fn, self.Value, self.Transparency)
+		end
+		if Library._changed then
+			Library:_changed(self)
 		end
 	end
 
@@ -2188,18 +2197,21 @@ function Elements:AddDropdown(id, opts)
 			local set = {}
 			if type(value) == "table" then
 				for key, v in pairs(value) do
-					if type(key) == "number" then
+					if type(key) == "number" and type(v) ~= "boolean" then
 						set[v] = true
-					elseif v then
+					elseif v == true then
 						set[key] = true
 					end
 				end
-			elseif value ~= nil then
+			elseif value ~= nil and value ~= false then
 				set[value] = true
 			end
 			return set
 		end
-		if type(value) == "number" then
+		if value == false then
+			return nil
+		end
+		if type(value) == "number" and not table.find(option.Values, value) then
 			return option.Values[value]
 		end
 		return value
@@ -2746,6 +2758,10 @@ function Elements:AddInput(id, opts)
 
 	function option:SetValue(value)
 		value = tostring(value or "")
+		if opts.Numeric and (value == "-" or value == "." or value == "-.") then
+			Box.Text = value
+			return
+		end
 		if opts.Numeric and value ~= "" and not tonumber(value) then
 			Box.Text = self.Value
 			return
@@ -5666,11 +5682,26 @@ function Library:Notify(title, description, duration)
 	end
 	duration = duration or 4
 
+	local live = {}
+	for _, child in ipairs(self.NotifyHolder:GetChildren()) do
+		if child:IsA("Frame") then
+			table.insert(live, child)
+		end
+	end
+	if #live >= 5 then
+		table.sort(live, function(a, b)
+			return (a:GetAttribute("At") or 0) < (b:GetAttribute("At") or 0)
+		end)
+		for i = 1, #live - 4 do
+			live[i]:Destroy()
+		end
+	end
 	local Slot = create("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 0),
 		Parent = self.NotifyHolder,
 	})
+	Slot:SetAttribute("At", os.clock())
 	local Card = create("Frame", {
 		Position = UDim2.fromOffset(320, 0),
 		Size = UDim2.new(1, 0, 0, 0),
@@ -5845,13 +5876,18 @@ function Library:SaveConfig(name)
 			elseif option.Type == "ColorPicker" then
 				value = { hex = toHex(option.Value), transparency = option.Transparency }
 			elseif option.Type == "Dropdown" and option.Multi and type(value) == "table" then
-				local set = {}
+				local list = {}
 				for key, on in pairs(value) do
 					if on and (type(key) == "string" or type(key) == "number") then
-						set[tostring(key)] = true
+						table.insert(list, key)
 					end
 				end
-				value = set
+				table.sort(list, function(a, b)
+					return tostring(a) < tostring(b)
+				end)
+				value = list
+			elseif option.Type == "Dropdown" and value == nil then
+				value = false
 			end
 			local okValue = pcall(function()
 				return HttpService:JSONEncode({ value })
@@ -5901,6 +5937,7 @@ function Library:SaveConfig(name)
 		end
 	end
 	self.CurrentConfig = name
+	self:_rememberLast(name)
 	return true, name, #objects, skipped
 end
 
@@ -5929,6 +5966,7 @@ function Library:LoadConfig(name)
 			end
 		end
 	end
+	self.LoadingConfigUntil = os.clock() + 1.5
 	local toggles, applied = {}, 0
 	for id, value in pairs(entries) do
 		local option = self.Options[id]
@@ -5946,6 +5984,8 @@ function Library:LoadConfig(name)
 		applied = applied + 1
 	end
 	self.CurrentConfig = name
+	self.LoadingConfigUntil = os.clock() + 1.5
+	self:_rememberLast(name)
 	return true, applied
 end
 
@@ -6019,17 +6059,146 @@ function Library:GetSilentLoad()
 	return self.SilentLoad == true
 end
 
-function Library:LoadAutoload()
-	local name = self:GetAutoload()
-	if not name then
+Library.AutoSaveName = "Last Session"
+
+function Library:_lastFile()
+	return self.LastConfigFile or (self.Folder and (self.Folder .. "/last_config.txt"))
+end
+
+function Library:_rememberLast(name)
+	local path = self:_lastFile()
+	if not (path and hasFileApi() and type(name) == "string" and name ~= "") or self.LastRemembered == name then
 		return
 	end
-	local ok, result = self:LoadConfig(name)
-	if ok then
-		self:Notify("Dexori", "Auto loaded config \"" .. name .. "\".")
-	else
-		self:Notify("Dexori", "Failed to load autoload config \"" .. name .. "\": " .. tostring(result))
+	self.LastRemembered = name
+	pcall(function()
+		ensureFolder(path:match("^(.*)/[^/]+$") or self.Folder)
+		writefile(path, name)
+	end)
+end
+
+function Library:_lastConfig()
+	local path = self:_lastFile()
+	if not (path and hasFileApi()) then
+		return nil
 	end
+	local ok, name = pcall(function()
+		return isfile(path) and readfile(path) or nil
+	end)
+	if not ok or type(name) ~= "string" then
+		return nil
+	end
+	name = name:gsub("^%s+", ""):gsub("%s+$", "")
+	if name == "" then
+		return nil
+	end
+	local okFile, exists = pcall(isfile, self:_configPath(name))
+	return okFile and exists and name or nil
+end
+
+function Library:GetAutoSave()
+	if self.AutoSaveOn ~= nil then
+		return self.AutoSaveOn
+	end
+	local on = true
+	if hasFileApi() and self.Folder then
+		local ok, data = pcall(function()
+			local path = self.Folder .. "/autosave.txt"
+			return isfile(path) and readfile(path) or nil
+		end)
+		if ok and type(data) == "string" then
+			on = not data:find("0", 1, true)
+		end
+	end
+	self.AutoSaveOn = on
+	return on
+end
+
+function Library:SetAutoSave(enabled)
+	self.AutoSaveOn = enabled == true
+	if hasFileApi() and self.Folder then
+		pcall(function()
+			ensureFolder(self.Folder)
+			writefile(self.Folder .. "/autosave.txt", self.AutoSaveOn and "1" or "0")
+		end)
+	end
+	if self.AutoSaveOn then
+		self:_changed({ Save = true })
+	end
+end
+
+function Library:FlushSave()
+	self.SaveQueued = false
+	if not (self.AutoSaveReady and hasFileApi() and self.Folder) or self:GetAutoSave() == false then
+		return false
+	end
+	local name = self.CurrentConfig or self.AutoSaveName
+	local ok, saved, why = pcall(self.SaveConfig, self, name)
+	if ok and saved then
+		self.LastAutoSave = os.clock()
+		if self.ConfigListRefresh then
+			pcall(self.ConfigListRefresh)
+		end
+		return true
+	end
+	if not self.AutoSaveWarned then
+		self.AutoSaveWarned = true
+		self:Notify("Dexori", "Couldn't auto save your settings: " .. tostring(ok and why or saved))
+	end
+	return false
+end
+
+function Library:_changed(option)
+	if not (option and option.Save) or self.Unloaded or not self.AutoSaveReady then
+		return
+	end
+	if self.LoadingConfigUntil and os.clock() < self.LoadingConfigUntil then
+		return
+	end
+	if self:GetAutoSave() == false then
+		return
+	end
+	self.SaveDue = os.clock() + 1
+	if self.SaveQueued then
+		return
+	end
+	self.SaveQueued = true
+	task.spawn(function()
+		while self.SaveQueued and os.clock() < (self.SaveDue or 0) and not self.Unloaded do
+			task.wait(0.25)
+		end
+		if self.SaveQueued then
+			self:FlushSave()
+		end
+	end)
+end
+
+function Library:LoadAutoload()
+	local name = self:GetAutoload()
+	if name then
+		local ok, result = self:LoadConfig(name)
+		if ok then
+			self:Notify("Dexori", "Auto loaded config \"" .. name .. "\".")
+		else
+			self:Notify("Dexori", "Failed to load autoload config \"" .. name .. "\": " .. tostring(result))
+		end
+	elseif self:GetAutoSave() and hasFileApi() and self.Folder then
+		local last = self:_lastConfig()
+		if not last then
+			local okFile, exists = pcall(isfile, self:_configPath(self.AutoSaveName))
+			last = okFile and exists and self.AutoSaveName or nil
+		end
+		if last then
+			local ok = self:LoadConfig(last)
+			if ok then
+				self:Notify("Dexori", last == self.AutoSaveName and "Restored your settings from last time."
+					or ("Restored your settings from \"" .. last .. "\"."))
+			end
+		end
+	end
+	task.delay(2, function()
+		self.AutoSaveReady = true
+	end)
 end
 
 function Library:BuildSettingsTab(window, name, section)
@@ -6046,6 +6215,14 @@ function Library:BuildSettingsTab(window, name, section)
 		ShowInList = false,
 	})
 	MenuKey:OnChanged(function(key)
+		if key == nil then
+			local keep = Library.ToggleKey or Enum.KeyCode.RightControl
+			Library:Notify("Dexori", "The menu key can't be empty, so it stays " .. tostring(keep.Name) .. ".")
+			task.defer(function()
+				MenuKey:SetValue(keep)
+			end)
+			return
+		end
 		Library:SetToggleKey(key)
 	end)
 	Menu:AddToggle("KeybindList", {
@@ -6063,6 +6240,17 @@ function Library:BuildSettingsTab(window, name, section)
 		end,
 	})
 	if hasFileApi() then
+		Menu:AddToggle("AutoSaveSettings", {
+			Text = "Auto save",
+			Description = "Saves every change to the loaded config, or to Last Session",
+			Default = self:GetAutoSave(),
+			Save = false,
+			Callback = function(enabled)
+				if enabled ~= Library:GetAutoSave() then
+					Library:SetAutoSave(enabled)
+				end
+			end,
+		})
 		Menu:AddToggle("SilentLoad", {
 			Text = "Silent load",
 			Description = "Start with the menu hidden",
@@ -6205,6 +6393,11 @@ function Library:BuildSettingsTab(window, name, section)
 
 	local rows = {}
 	local refresh
+	local shownKey = nil
+	local function paintHead(count)
+		local saving = Library:GetAutoSave() and (Library.CurrentConfig or Library.AutoSaveName) or nil
+		HeadText.Text = "SAVED CONFIGS · " .. tostring(count) .. (saving and (" · AUTO SAVING TO " .. saving:upper()) or "")
+	end
 	local function notify(message)
 		Library:Notify(Library.Title or "Dexori", message)
 	end
@@ -6254,6 +6447,9 @@ function Library:BuildSettingsTab(window, name, section)
 		Load.MouseButton1Click:Connect(function()
 			local ok, result = Library:LoadConfig(name)
 			notify(ok and ("Loaded \"" .. name .. "\" (" .. tostring(result) .. " settings).") or ("Couldn't load: " .. tostring(result)))
+			if ok then
+				refresh()
+			end
 		end)
 		Save.MouseButton1Click:Connect(function()
 			local ok, result, count = Library:SaveConfig(name)
@@ -6301,7 +6497,8 @@ function Library:BuildSettingsTab(window, name, section)
 		rows = {}
 		local names = Library:ListConfigs()
 		local current = Library:GetAutoload()
-		HeadText.Text = "SAVED CONFIGS · " .. #names
+		shownKey = table.concat(names, "\0") .. "\1" .. tostring(current)
+		paintHead(#names)
 		for index, name in ipairs(names) do
 			table.insert(rows, configRow(name, index, name == current))
 		end
@@ -6339,6 +6536,15 @@ function Library:BuildSettingsTab(window, name, section)
 		end
 	end)
 	RefreshButton.MouseButton1Click:Connect(refresh)
+	Library.ConfigListRefresh = function()
+		local names = Library:ListConfigs()
+		local key = table.concat(names, "\0") .. "\1" .. tostring(Library:GetAutoload())
+		if key ~= shownKey then
+			refresh()
+		else
+			paintHead(#names)
+		end
+	end
 	refresh()
 
 	return Tab
@@ -6351,6 +6557,9 @@ end
 function Library:Unload()
 	if self.Unloaded then
 		return
+	end
+	if self.SaveQueued then
+		pcall(self.FlushSave, self)
 	end
 	self.Unloaded = true
 	for _, fn in ipairs(UnloadCallbacks) do
