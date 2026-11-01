@@ -845,9 +845,6 @@ local function newOption(id, kind, opts)
 		for _, fn in ipairs(self.Changed) do
 			fire(fn, self.Value)
 		end
-		if Library._changed then
-			Library:_changed(self)
-		end
 	end
 	if id then
 		if Library.Options[id] then
@@ -933,9 +930,6 @@ local function newKeybind(id, opts, parent, position, onPress, onRelease, meta)
 			fire(fn, self.Value)
 		end
 		refreshKeybinds()
-		if Library._changed then
-			Library:_changed(self)
-		end
 	end
 
 	Chip.MouseButton1Click:Connect(function()
@@ -1316,9 +1310,6 @@ local function attachColorPicker(group, slotParent, id, opts)
 		fire(self.Callback, self.Value, self.Transparency)
 		for _, fn in ipairs(self.Changed) do
 			fire(fn, self.Value, self.Transparency)
-		end
-		if Library._changed then
-			Library:_changed(self)
 		end
 	end
 
@@ -5937,7 +5928,6 @@ function Library:SaveConfig(name)
 		end
 	end
 	self.CurrentConfig = name
-	self:_rememberLast(name)
 	return true, name, #objects, skipped
 end
 
@@ -5985,7 +5975,6 @@ function Library:LoadConfig(name)
 	end
 	self.CurrentConfig = name
 	self.LoadingConfigUntil = os.clock() + 1.5
-	self:_rememberLast(name)
 	return true, applied
 end
 
@@ -6059,120 +6048,6 @@ function Library:GetSilentLoad()
 	return self.SilentLoad == true
 end
 
-Library.AutoSaveName = "Last Session"
-
-function Library:_lastFile()
-	return self.LastConfigFile or (self.Folder and (self.Folder .. "/last_config.txt"))
-end
-
-function Library:_rememberLast(name)
-	local path = self:_lastFile()
-	if not (path and hasFileApi() and type(name) == "string" and name ~= "") or self.LastRemembered == name then
-		return
-	end
-	self.LastRemembered = name
-	pcall(function()
-		ensureFolder(path:match("^(.*)/[^/]+$") or self.Folder)
-		writefile(path, name)
-	end)
-end
-
-function Library:_lastConfig()
-	local path = self:_lastFile()
-	if not (path and hasFileApi()) then
-		return nil
-	end
-	local ok, name = pcall(function()
-		return isfile(path) and readfile(path) or nil
-	end)
-	if not ok or type(name) ~= "string" then
-		return nil
-	end
-	name = name:gsub("^%s+", ""):gsub("%s+$", "")
-	if name == "" then
-		return nil
-	end
-	local okFile, exists = pcall(isfile, self:_configPath(name))
-	return okFile and exists and name or nil
-end
-
-function Library:GetAutoSave()
-	if self.AutoSaveOn ~= nil then
-		return self.AutoSaveOn
-	end
-	local on = true
-	if hasFileApi() and self.Folder then
-		local ok, data = pcall(function()
-			local path = self.Folder .. "/autosave.txt"
-			return isfile(path) and readfile(path) or nil
-		end)
-		if ok and type(data) == "string" then
-			on = not data:find("0", 1, true)
-		end
-	end
-	self.AutoSaveOn = on
-	return on
-end
-
-function Library:SetAutoSave(enabled)
-	self.AutoSaveOn = enabled == true
-	if hasFileApi() and self.Folder then
-		pcall(function()
-			ensureFolder(self.Folder)
-			writefile(self.Folder .. "/autosave.txt", self.AutoSaveOn and "1" or "0")
-		end)
-	end
-	if self.AutoSaveOn then
-		self:_changed({ Save = true })
-	end
-end
-
-function Library:FlushSave()
-	self.SaveQueued = false
-	if not (self.AutoSaveReady and hasFileApi() and self.Folder) or self:GetAutoSave() == false then
-		return false
-	end
-	local name = self.CurrentConfig or self.AutoSaveName
-	local ok, saved, why = pcall(self.SaveConfig, self, name)
-	if ok and saved then
-		self.LastAutoSave = os.clock()
-		if self.ConfigListRefresh then
-			pcall(self.ConfigListRefresh)
-		end
-		return true
-	end
-	if not self.AutoSaveWarned then
-		self.AutoSaveWarned = true
-		self:Notify("Dexori", "Couldn't auto save your settings: " .. tostring(ok and why or saved))
-	end
-	return false
-end
-
-function Library:_changed(option)
-	if not (option and option.Save) or self.Unloaded or not self.AutoSaveReady then
-		return
-	end
-	if self.LoadingConfigUntil and os.clock() < self.LoadingConfigUntil then
-		return
-	end
-	if self:GetAutoSave() == false then
-		return
-	end
-	self.SaveDue = os.clock() + 1
-	if self.SaveQueued then
-		return
-	end
-	self.SaveQueued = true
-	task.spawn(function()
-		while self.SaveQueued and os.clock() < (self.SaveDue or 0) and not self.Unloaded do
-			task.wait(0.25)
-		end
-		if self.SaveQueued then
-			self:FlushSave()
-		end
-	end)
-end
-
 function Library:LoadAutoload()
 	local name = self:GetAutoload()
 	if name then
@@ -6182,23 +6057,7 @@ function Library:LoadAutoload()
 		else
 			self:Notify("Dexori", "Failed to load autoload config \"" .. name .. "\": " .. tostring(result))
 		end
-	elseif self:GetAutoSave() and hasFileApi() and self.Folder then
-		local last = self:_lastConfig()
-		if not last then
-			local okFile, exists = pcall(isfile, self:_configPath(self.AutoSaveName))
-			last = okFile and exists and self.AutoSaveName or nil
-		end
-		if last then
-			local ok = self:LoadConfig(last)
-			if ok then
-				self:Notify("Dexori", last == self.AutoSaveName and "Restored your settings from last time."
-					or ("Restored your settings from \"" .. last .. "\"."))
-			end
-		end
 	end
-	task.delay(2, function()
-		self.AutoSaveReady = true
-	end)
 end
 
 function Library:BuildSettingsTab(window, name, section)
@@ -6240,17 +6099,6 @@ function Library:BuildSettingsTab(window, name, section)
 		end,
 	})
 	if hasFileApi() then
-		Menu:AddToggle("AutoSaveSettings", {
-			Text = "Auto save",
-			Description = "Saves every change to the loaded config, or to Last Session",
-			Default = self:GetAutoSave(),
-			Save = false,
-			Callback = function(enabled)
-				if enabled ~= Library:GetAutoSave() then
-					Library:SetAutoSave(enabled)
-				end
-			end,
-		})
 		Menu:AddToggle("SilentLoad", {
 			Text = "Silent load",
 			Description = "Start with the menu hidden",
@@ -6395,8 +6243,7 @@ function Library:BuildSettingsTab(window, name, section)
 	local refresh
 	local shownKey = nil
 	local function paintHead(count)
-		local saving = Library:GetAutoSave() and (Library.CurrentConfig or Library.AutoSaveName) or nil
-		HeadText.Text = "SAVED CONFIGS · " .. tostring(count) .. (saving and (" · AUTO SAVING TO " .. saving:upper()) or "")
+		HeadText.Text = "SAVED CONFIGS · " .. tostring(count)
 	end
 	local function notify(message)
 		Library:Notify(Library.Title or "Dexori", message)
@@ -6557,9 +6404,6 @@ end
 function Library:Unload()
 	if self.Unloaded then
 		return
-	end
-	if self.SaveQueued then
-		pcall(self.FlushSave, self)
 	end
 	self.Unloaded = true
 	for _, fn in ipairs(UnloadCallbacks) do
