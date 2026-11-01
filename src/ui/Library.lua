@@ -5781,24 +5781,86 @@ function Library:_configPath(name)
 	return self.Folder .. "/configs/" .. name .. ".json"
 end
 
+function Library:_configName(name)
+	local raw = tostring(name or ""):gsub("^%s+", ""):gsub("%s+$", "")
+	if raw ~= "" and not raw:find("[/\\:%*%?\"<>|]") and hasFileApi() then
+		local ok, exists = pcall(isfile, self:_configPath(raw))
+		if ok and exists then
+			return raw
+		end
+	end
+	return (cleanName(raw):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function configSnapshot(text)
+	local ok, data = pcall(function()
+		return HttpService:JSONDecode(text)
+	end)
+	if not ok or type(data) ~= "table" or type(data.objects) ~= "table" then
+		return nil
+	end
+	local map = {}
+	for _, object in ipairs(data.objects) do
+		if type(object) == "table" and object.idx ~= nil then
+			local okValue, value = pcall(function()
+				return HttpService:JSONEncode({ object.value })
+			end)
+			map[tostring(object.idx)] = okValue and value or "?"
+		end
+	end
+	return map
+end
+
+local function sameSnapshot(a, b)
+	if not (a and b) then
+		return false
+	end
+	for key, value in pairs(a) do
+		if b[key] ~= value then
+			return false
+		end
+	end
+	for key in pairs(b) do
+		if a[key] == nil then
+			return false
+		end
+	end
+	return true
+end
+
 function Library:SaveConfig(name)
 	if not hasFileApi() then
 		return false, "Your executor can't save files."
 	end
-	name = cleanName(name)
+	name = self:_configName(name)
 	if name == "" then
 		return false, "Enter a config name first."
 	end
-	local objects = {}
+	local objects, skipped = {}, {}
 	for id, option in pairs(self.Options) do
 		if option.Save then
 			local value = option.Value
 			if option.Type == "Keybind" then
-				value = option.Value and option.Value.Name or "None"
+				value = typeof(option.Value) == "EnumItem" and option.Value.Name or "None"
 			elseif option.Type == "ColorPicker" then
 				value = { hex = toHex(option.Value), transparency = option.Transparency }
+			elseif option.Type == "Dropdown" and option.Multi and type(value) == "table" then
+				local set = {}
+				for key, on in pairs(value) do
+					if on and (type(key) == "string" or type(key) == "number") then
+						set[tostring(key)] = true
+					end
+				end
+				value = set
 			end
-			table.insert(objects, { type = option.Type, idx = id, value = value })
+			local okValue = pcall(function()
+				return HttpService:JSONEncode({ value })
+			end)
+			if okValue then
+				table.insert(objects, { type = option.Type, idx = id, value = value })
+			else
+				table.insert(skipped, tostring(id))
+			end
 		end
 	end
 	table.sort(objects, function(a, b)
@@ -5811,6 +5873,14 @@ function Library:SaveConfig(name)
 		return false, "Couldn't encode the config: " .. tostring(encoded)
 	end
 	local path = self:_configPath(name)
+	local want = configSnapshot(encoded)
+	local function written()
+		local okRead, back = pcall(readfile, path)
+		if not okRead or type(back) ~= "string" then
+			return false
+		end
+		return back == encoded or sameSnapshot(want, configSnapshot(back))
+	end
 	local ok, err = pcall(function()
 		ensureFolder(self.Folder .. "/configs")
 		writefile(path, encoded)
@@ -5818,19 +5888,28 @@ function Library:SaveConfig(name)
 	if not ok then
 		return false, "Couldn't write the file: " .. tostring(err)
 	end
-
-	local okRead, back = pcall(readfile, path)
-	if not okRead or back ~= encoded then
-		return false, "The config file didn't save correctly."
+	if not written() then
+		if type(delfile) == "function" then
+			pcall(delfile, path)
+		end
+		pcall(writefile, path, encoded)
+		if not written() then
+			pcall(writefile, path, encoded)
+		end
+		if not written() then
+			return false, "Your executor didn't overwrite the file (it still has the old settings)."
+		end
 	end
-	return true, name
+	self.CurrentConfig = name
+	return true, name, #objects, skipped
 end
 
 function Library:LoadConfig(name)
 	if not hasFileApi() then
 		return false, "Your executor can't read files."
 	end
-	local path = self:_configPath(cleanName(name))
+	name = self:_configName(name)
+	local path = self:_configPath(name)
 	if not isfile(path) then
 		return false, "Config not found."
 	end
@@ -5866,6 +5945,7 @@ function Library:LoadConfig(name)
 		pcall(self.Options[id].SetValue, self.Options[id], value)
 		applied = applied + 1
 	end
+	self.CurrentConfig = name
 	return true, applied
 end
 
@@ -5873,7 +5953,7 @@ function Library:DeleteConfig(name)
 	if not hasFileApi() or type(delfile) ~= "function" then
 		return false, "Your executor can't delete files."
 	end
-	local path = self:_configPath(cleanName(name))
+	local path = self:_configPath(self:_configName(name))
 	if not isfile(path) then
 		return false, "Config not found."
 	end
@@ -5902,13 +5982,14 @@ function Library:SetAutoload(name)
 		return
 	end
 	ensureFolder(self.Folder)
-	writefile(self.Folder .. "/autoload.txt", cleanName(name))
+	writefile(self.Folder .. "/autoload.txt", name == "" and "" or self:_configName(name))
 end
 
 function Library:GetAutoload()
 	local path = self.Folder .. "/autoload.txt"
 	if hasFileApi() and isfile(path) then
-		local name = readfile(path)
+		local ok, name = pcall(readfile, path)
+		name = ok and type(name) == "string" and name:gsub("^%s+", ""):gsub("%s+$", "") or ""
 		return name ~= "" and name or nil
 	end
 	return nil
@@ -6175,8 +6256,11 @@ function Library:BuildSettingsTab(window, name, section)
 			notify(ok and ("Loaded \"" .. name .. "\" (" .. tostring(result) .. " settings).") or ("Couldn't load: " .. tostring(result)))
 		end)
 		Save.MouseButton1Click:Connect(function()
-			local ok, result = Library:SaveConfig(name)
-			notify(ok and ("Saved over \"" .. name .. "\".") or ("Couldn't save: " .. tostring(result)))
+			local ok, result, count = Library:SaveConfig(name)
+			notify(ok and ("Saved over \"" .. name .. "\" (" .. tostring(count) .. " settings).") or ("Couldn't save: " .. tostring(result)))
+			if ok then
+				refresh()
+			end
 		end)
 		Star.MouseButton1Click:Connect(function()
 			if autoload then
