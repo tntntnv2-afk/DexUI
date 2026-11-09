@@ -8,7 +8,9 @@ A Roblox UI library with the Kompile UI v5 look in Dexori deep blue (#2563eb): a
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/tntntnv2-afk/DexUI/main/loader.lua"))()
 ```
 
-The loader caches the library in `Dexori/library_cache.lua`, starts from the cache, and refreshes it from GitHub in the background.
+The loader downloads the newest library on every start and keeps a copy in `Dexori/library_cache.lua`. If GitHub hasn't answered within 5 seconds it starts from that saved copy instead; with no saved copy it keeps waiting for the download.
+
+Running the same script again replaces the menu that is already open (matched by the folder given to `SetFolder`), so there are never two menus from one script.
 
 The old library (v2) is still at `DexUI.lua` in the repo root, so scripts that load it keep working.
 
@@ -58,7 +60,6 @@ local Window = Library:CreateWindow({
 	Title = "Dexori",
 	Footer = "Dexori Hub",
 	FooterRight = "made by me · build 1",
-	Badge = "Premium",
 	ToggleKey = "RightControl",
 })
 Window:AddSection("Main")
@@ -78,17 +79,19 @@ Library:LoadAutoload()
 
 `CreateWindow` options, all optional:
 
-- `Title`: name at the top of the sidebar. `Subtitle`: the line under it (default `v1.0 · Script Hub`).
-- `Game`: text in the pill next to the page title. Leave it out to show the current place's name, or `false` to hide the pill.
-- `Badge`: small tag under your name in the user card, like `"Premium"`. Without it the card shows `@username`. `User = false` hides the card.
-- `Footer` and `FooterRight`: left and right footer text. FPS and ping are always shown on the right.
-- `Width`, `Height` (default 780 x 520), `ToggleKey`.
+- `Title`: the name used on notifications. `Subtitle`: the text after the logo in the title bar (default `Script Hub`).
+- `Game`: text in the pill next to the subtitle. Leave it out to show the current place's name, or `false` to hide the pill.
+- `Footer` and `FooterRight`: left and right footer text. FPS and ping are always shown on the right; long footer texts are shortened to make room.
+- `Width`, `Height` (default 550 x 600, never larger than the screen), `ToggleKey` (default `RightControl`; an unknown key name falls back to it).
+- `TabIcons = false` hides the tab icons.
 - `AutoShow = false` starts with the menu hidden. Players can also turn on **Silent load** in Settings → Menu; it's saved in `<folder>/silent_load.txt` and works the same way (`Library:SetSilentLoad`, `Library:GetSilentLoad`).
 
-Below 600 px wide the sidebar shrinks to icons only.
+Tabs sit in a bar under the title bar. When they don't all fit, the bar scrolls (wheel or drag) and fades at the edge that has more. Below 480 px wide the window switches to a compact layout: shorter search box, no menu-key chip and no right footer text.
 
-- `Window:AddSection("Main")`: a heading in the sidebar.
-- `Window:AddTab(name, icon)`: a sidebar tab. `icon` is a name from the icon list; `Tab:SetIcon`, `Tab:SetTitle`.
+The window can be dragged by its title bar and resized from the bottom-right corner. It stays on screen, re-fits when the screen or the UI scale changes, and frees the mouse in first-person and mouse-locked games while it is open. On touch devices a Dexori button opens and closes the menu; drag it to move it.
+
+- `Window:AddSection("Main")`: starts a new group of tabs.
+- `Window:AddTab(name, icon)`: a tab. `icon` is a name from the icon list; `Tab:SetIcon`.
 - `Library:SetGame`, `SetFooter`, `SetFooterRight`, `SetSubtitle` change the header and footer later.
 - The minimize button hides the menu; the close button unloads it after a second click.
 
@@ -110,9 +113,12 @@ Some handy names: `house`, `sprout`, `swords`, `sword`, `crosshair`, `map-pin`, 
 - `AddStats({ { Label = "Time", Value = "00:00" }, { Label = "Gold", Value = "0", Accent = true } })` returns an object with `:Set(label, value)`.
 - `AddProgress({ Text = "Level 47", Value = 0.68 })` returns an object with `:SetValue(0..1)` and `:SetText()`.
 - `Library.Options[id]`: every toggle, slider, dropdown, input, keybind and colour picker by id (`.Value`, `:SetValue()`, `:OnChanged()`)
-- `Library:Notify(title, text, seconds)`
-- `Library:SetTheme({ ... })`
-- `Library:SaveConfig(name)`, `LoadConfig`, `DeleteConfig`, `ListConfigs`, `SetAutoload`, `LoadAutoload`
+- `AddButton` also accepts `Callback` in place of `Func`.
+- Dropdowns accept any value by default, so a list can be filled after its value is set. Add `Strict = true` to refuse values that aren't in the list (a refused value is remembered and applied if `SetValues` adds it later). When `SetValues` removes the picked value and the script doesn't set a new one, the callback fires with the new selection.
+- `Library:Notify(title, text, seconds)`, `Library:Notify(text)`, `Library:Notify(text, seconds)` or `Library:Notify({ Title, Description, Time })`
+- `Library:SetTheme({ ... })` changes theme colours. The accent stays Dexori blue.
+- `Library:SaveConfig(name)`, `LoadConfig`, `DeleteConfig`, `ListConfigs`, `SetAutoload`, `LoadAutoload`. `LoadConfig` returns `true, applied, skipped`; values of the wrong type are skipped, not applied.
+- Menu key, UI scale, watermark and keybind list are the player's own settings. They are saved in `<folder>/menu.json`, not in configs, so loading a shared config never changes them.
 - `Library:OnUnload(fn)` and `Library:Unload()`
 
 ## Target card
@@ -129,8 +135,9 @@ Card:SetState("Fighting")
 Card:SetTarget(nil)
 ```
 
-- `SetTarget` takes a model (it finds the Humanoid and root itself) or a table with `Model`, `Humanoid`, `Root`, `Name`, `Subtitle`, `Badge`, `Icon`. Call it every frame if you like; the same model doesn't reset the stats, and a boss that already died isn't counted twice.
-- No Humanoid? Pass `Health` and `MaxHealth` and update with `Card:SetHealth(hp, max)`.
+- `SetTarget` takes a model (it finds the Humanoid and root itself) or a table with `Model`, `Humanoid`, `Root`, `Name`, `Subtitle`, `Badge`, `Icon`. Call it every frame if you like; the same model (or the same name, when there is no model) doesn't reset the stats, a target that is already dead when it is picked up is ignored, and a kill is only counted for a target the card saw alive.
+- No Humanoid? Pass `Health` and `MaxHealth` and update with `Card:SetHealth(hp, max)`. Infinite health shows as ∞.
+- Kills and `OnDefeated` keep working while the player has the card hidden.
 - `SetState` knows `Fighting`, `Attacking`, `Dodging`, `Looting`, `Finishing`, `Gripping`, `Retreating`, `Healing`, `Resetting`, `Waiting` and `Defeated`, each with its own colour, or any text with an optional colour.
 - `Card:AddBar("Shield", { Color = Color3.fromRGB(96, 165, 250) })` adds a thin bar under the health bar; `GetBar(name):Set(value, max)`, `:SetVisible()`, `:SetColor()`.
 - `AddSettings(groupbox)` adds the show toggle, damage numbers toggle, scale slider and a reset position button.
@@ -140,7 +147,7 @@ Card:SetTarget(nil)
 ## Layout
 
 ```
-loader.lua            entry point, caches the library
+loader.lua            entry point, downloads the library and keeps a saved copy
 src/ui/Library.lua    Dexori UI
 src/ui/Library_test.lua the testing copy (the Bloodlines dev build loads it)
 assets/               images the library downloads (see assets/README.md)

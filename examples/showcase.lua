@@ -1,9 +1,6 @@
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/tntntnv2-afk/DexUI/main/loader.lua"))()
 
 local Env = (getgenv and getgenv()) or _G
-if Env.DexoriShowcase and not Env.DexoriShowcase.Unloaded then
-	Env.DexoriShowcase:Unload()
-end
 Env.DexoriShowcase = Library
 
 local Options = Library.Options
@@ -14,7 +11,6 @@ local Window = Library:CreateWindow({
 	Title = "Dexori",
 	Footer = "Dexori Hub",
 	FooterRight = "made by Dexori · build " .. Library.Version,
-	Badge = "Premium",
 	ToggleKey = "RightControl",
 })
 
@@ -207,12 +203,6 @@ Colors:AddColorPicker("DemoAccentPreview", { Text = "Accent preview", Default = 
 Colors:AddColorPicker("DemoGlass", { Text = "With transparency", Default = Color3.fromRGB(255, 111, 181), Transparency = 0.3 })
 Colors:AddLabel("Enemy"):AddColorPicker("DemoEnemyColor", { Default = Color3.fromRGB(255, 60, 60), Title = "Enemy colour" })
 Colors:AddLabel("Team"):AddColorPicker("DemoTeamColor", { Default = Color3.fromRGB(60, 180, 255), Title = "Team colour" })
-Colors:AddButton({
-	Text = "Use preview as UI accent",
-	Func = function()
-		Library:SetTheme({ Accent = Options.DemoAccentPreview.Value })
-	end,
-})
 
 for _, id in ipairs({ "DemoEnabled", "DemoVolume", "DemoMode", "DemoFruit", "DemoTargets", "DemoName", "DemoAccentPreview" }) do
 	Options[id]:OnChanged(refreshLive)
