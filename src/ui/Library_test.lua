@@ -4243,7 +4243,8 @@ local function buildWatermark(ScreenGui)
 		lastFps, lastPing = fps or lastFps, ping or lastPing
 		FpsValue.Text = lastFps .. " fps"
 		PingValue.Text = lastPing .. " ms"
-		local count = #Players:GetPlayers()
+		local okPlayers, playerList = pcall(Players.GetPlayers, Players)
+		local count = (okPlayers and type(playerList) == "table") and #playerList or 0
 		PlayerValue.Text = count .. (count == 1 and " player" or " players")
 	end
 	paint(0, 0)
