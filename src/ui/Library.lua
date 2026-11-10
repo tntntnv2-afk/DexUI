@@ -1368,6 +1368,7 @@ local function attachColorPicker(group, slotParent, id, opts, holder)
 		Theme = { BackgroundColor3 = "Background" },
 		Parent = group.Container,
 	}, { corner(10), stroke("BorderLight") })
+	local holderOrder = holder and holder.LayoutOrder
 	local Body = create("Frame", {
 		BackgroundTransparency = 1,
 		Size = UDim2.new(1, 0, 0, 0),
@@ -1599,6 +1600,14 @@ local function attachColorPicker(group, slotParent, id, opts, holder)
 		local id = panelId
 		tween(SwatchEdge, { Color = state and Library.Theme.Accent or Library.Theme.BorderLight })
 		if state then
+			if holder then
+				if holder.Parent and Panel.Parent ~= holder.Parent then
+					Panel.Parent = holder.Parent
+				end
+				if holder.LayoutOrder ~= holderOrder then
+					Panel.LayoutOrder = holder.LayoutOrder
+				end
+			end
 			if not Panel.Visible then
 				Panel.Size = UDim2.new(1, 0, 0, 0)
 				Panel.Visible = true
