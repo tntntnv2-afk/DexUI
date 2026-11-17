@@ -6900,6 +6900,7 @@ function Library:LoadConfig(name)
 	end
 	local migrate = self._migrating and self._menuFresh
 	local toggles, applied, skipped = {}, 0, 0
+	self._applyingConfig = true
 	for id, value in pairs(entries) do
 		local option = self.Options[id]
 		if option and (option.Save or (migrate and option.MenuSetting)) then
@@ -6913,6 +6914,7 @@ function Library:LoadConfig(name)
 			end
 		end
 	end
+	self._applyingConfig = nil
 	for id, value in pairs(toggles) do
 		pcall(self.Options[id].SetValue, self.Options[id], value)
 		applied = applied + 1
@@ -7037,6 +7039,573 @@ function Library:LoadAutoload()
 	end
 end
 
+do
+	local Workspace = game:GetService("Workspace")
+	local AssetService = game:GetService("AssetService")
+	local PRESETS = {
+		{ "Tung Tung Sahur", 144713363604198 },
+		{ "Chunky Tung Tung Sahur", 7720256308433 },
+		{ "Buff Tung Tung Sahur", 238062319100585 },
+		{ "Tralalero Tralala", 145287178685864 },
+		{ "Bombardiro Crocodilo", 164706727957479 },
+		{ "Ballerina Cappuccina", 7827006872358 },
+		{ "Brr Brr Patapim", 200820530027953 },
+		{ "Boneca Ambalabu", 230416761297696 },
+		{ "Strawberry Elephant", 248295212434663 },
+		{ "Los Hotspotsitos", 98093023631854 },
+		{ "Bloodrot 67", 75008253443208 },
+		{ "Rainbow 67", 223062218872537 },
+		{ "Mi Gatito", 555671533567190 },
+		{ "Smurf Cat", 2958918555791 },
+		{ "Tallest Skeleton", 231464568869456 },
+	}
+	local PRESET_NAMES, PRESET_IDS = {}, {}
+	for _, row in ipairs(PRESETS) do
+		table.insert(PRESET_NAMES, row[1])
+		PRESET_IDS[row[1]] = row[2]
+end
+
+	local ANIMS = {
+		idle = "rbxassetid://507766388",
+		run = "rbxassetid://507767714",
+		jump = "rbxassetid://507765000",
+		fall = "rbxassetid://507767968",
+		climb = "rbxassetid://507765644",
+		swim = "rbxassetid://507784897",
+	}
+	local ANIM_SLOTS = { idle = "idle", run = "run", jump = "jump", fall = "fall", climb = "climb", swim = "swim" }
+	local RENDER_NAME = "DexoriCharacterFollow"
+
+	local function notify(text, duration)
+		pcall(function() Library:Notify("Dexori", text, duration or 4) end)
+end
+
+	local function opt(id, default)
+		local option = Library.Options[id]
+		if option == nil or option.Value == nil then
+			return default
+		end
+		return option.Value
+end
+
+	local function customText()
+		return (tostring(opt("CharCustom", "") or ""):gsub("%s", ""))
+end
+
+	local Characters = { on = false, token = 0, templates = {}, model = nil, conns = {} }
+
+	function Characters.parse(text)
+		text = tostring(text or "")
+		local id = text:match("bundles/(%d+)") or text:match("^%s*(%d+)%s*$")
+		id = id and tonumber(id)
+		if id and id > 0 then
+			return id
+		end
+		return nil
+end
+
+	function Characters.wanted()
+		if customText() ~= "" then
+			return Characters.parse(opt("CharCustom", "")), true
+		end
+		return PRESET_IDS[opt("CharPreset", PRESET_NAMES[1])], false
+end
+
+	local function outfitsFor(bundleId)
+		local found = {}
+		local ok, details = pcall(function()
+			return AssetService:GetBundleDetailsAsync(bundleId)
+		end)
+		if ok and type(details) == "table" and type(details.Items) == "table" then
+			for _, item in ipairs(details.Items) do
+				if type(item) == "table" and item.Type == "UserOutfit" and tonumber(item.Id) then
+					table.insert(found, tonumber(item.Id))
+				end
+			end
+		end
+		if #found > 0 then
+			return found
+		end
+		local send = (type(request) == "function" and request) or (type(http_request) == "function" and http_request)
+			or (type(syn) == "table" and syn.request) or (type(http) == "table" and http.request) or nil
+		if not send then
+			return found
+		end
+		local okSend, res = pcall(send, {
+			Url = "https://catalog.roblox.com/v1/bundles/" .. string.format("%.0f", bundleId) .. "/details",
+			Method = "GET",
+		})
+		if not okSend or type(res) ~= "table" or type(res.Body) ~= "string" then
+			return found
+		end
+		local okJson, data = pcall(function()
+			return HttpService:JSONDecode(res.Body)
+		end)
+		if not okJson or type(data) ~= "table" or type(data.items) ~= "table" then
+			return found
+		end
+		for _, item in ipairs(data.items) do
+			if type(item) == "table" and item.type == "UserOutfit" and tonumber(item.id) then
+				table.insert(found, tonumber(item.id))
+			end
+		end
+		return found
+end
+
+	local function fromClone(desc)
+		local character = LocalPlayer.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not humanoid or humanoid.RigType ~= Enum.HumanoidRigType.R15 then
+			return nil
+		end
+		local copy = nil
+		pcall(function()
+			local was = character.Archivable
+			character.Archivable = true
+			copy = character:Clone()
+			character.Archivable = was
+		end)
+		if not copy then
+			return nil
+		end
+		for _, d in ipairs(copy:GetDescendants()) do
+			if d:IsA("LuaSourceContainer") or d:IsA("Tool") or d:IsA("ForceField") then
+				pcall(function() d:Destroy() end)
+			elseif d:IsA("BasePart") then
+				d.CanCollide = false
+				d.CanQuery = false
+				d.CanTouch = false
+			end
+		end
+		local root = copy:FindFirstChild("HumanoidRootPart")
+		local copyHumanoid = copy:FindFirstChildOfClass("Humanoid")
+		if not root or not copyHumanoid then
+			copy:Destroy()
+			return nil
+		end
+		root.Anchored = true
+		root.CFrame = CFrame.new(0, 50000, 0)
+		copy.Parent = Workspace.CurrentCamera
+		local ok = pcall(function()
+			copyHumanoid:ApplyDescription(desc)
+		end)
+		copy.Parent = nil
+		if not ok then
+			copy:Destroy()
+			return nil
+		end
+		return copy
+end
+
+	local function prepare(model)
+		local humanoid = model:FindFirstChildOfClass("Humanoid")
+		local root = model:FindFirstChild("HumanoidRootPart")
+		if not humanoid or not root then
+			return nil
+		end
+		local anims = {}
+		local animate = model:FindFirstChild("Animate")
+		if animate then
+			for slot in pairs(ANIM_SLOTS) do
+				local holder = animate:FindFirstChild(slot)
+				local anim = holder and holder:FindFirstChildOfClass("Animation")
+				if anim and tostring(anim.AnimationId) ~= "" then
+					anims[slot] = anim.AnimationId
+				end
+			end
+		end
+		local ground = nil
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("LuaSourceContainer") or d:IsA("Sound") or d:IsA("ForceField") then
+				pcall(function() d:Destroy() end)
+			elseif d:IsA("BasePart") then
+				d.Anchored = d == root
+				d.CanCollide = false
+				d.CanQuery = false
+				d.CanTouch = false
+				d.Massless = true
+				pcall(function() d.CastShadow = d ~= root end)
+				if d.Parent == model and d ~= root then
+					local bottom = root.Position.Y - (d.Position.Y - d.Size.Y / 2)
+					if not ground or bottom > ground then
+						ground = bottom
+					end
+				end
+			end
+		end
+		pcall(function() humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None end)
+		pcall(function() humanoid.HealthDisplayType = Enum.HumanoidHealthDisplayType.AlwaysOff end)
+		pcall(function() humanoid.BreakJointsOnDeath = false end)
+		pcall(function() humanoid.RequiresNeck = false end)
+		pcall(function() humanoid.EvaluateStateMachine = false end)
+		if not ground or ground < 0.5 or ground > 40 then
+			ground = (tonumber(humanoid.HipHeight) or 2) + root.Size.Y / 2
+		end
+		model.Name = "Avatar"
+		return { model = model, ground = ground, anims = anims }
+end
+
+	function Characters.template(bundleId)
+		local have = Characters.templates[bundleId]
+		if have then
+			return have
+		end
+		local desc = nil
+		for _, outfit in ipairs(outfitsFor(bundleId)) do
+			local okDesc, got = pcall(function()
+				return Players:GetHumanoidDescriptionFromOutfitId(outfit)
+			end)
+			if okDesc and typeof(got) == "Instance" then
+				desc = got
+				break
+			end
+		end
+		if not desc then
+			return nil
+		end
+		local okModel, model = pcall(function()
+			return Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R15)
+		end)
+		if not okModel or typeof(model) ~= "Instance" then
+			model = fromClone(desc)
+		end
+		if typeof(model) ~= "Instance" then
+			return nil
+		end
+		local ready = prepare(model)
+		if not ready then
+			pcall(function() model:Destroy() end)
+			return nil
+		end
+		Characters.templates[bundleId] = ready
+		return ready
+end
+
+	local function hideable(obj, character)
+		if not (obj:IsA("BasePart") or obj:IsA("Decal")) then
+			return false
+		end
+		local tool = obj:FindFirstAncestorWhichIsA("Tool")
+		return not (tool and tool:IsDescendantOf(character))
+end
+
+	local function groundOf(character, humanoid, root)
+		local hip = tonumber(humanoid.HipHeight) or 0
+		if humanoid.RigType == Enum.HumanoidRigType.R15 then
+			return hip + root.Size.Y / 2
+		end
+		local leg = character:FindFirstChild("Left Leg") or character:FindFirstChild("Right Leg")
+		return hip + root.Size.Y / 2 + (leg and leg.Size.Y or 2)
+end
+
+	function Characters.clear()
+		pcall(function() RunService:UnbindFromRenderStep(RENDER_NAME) end)
+		for _, c in ipairs(Characters.conns) do
+			pcall(function() c:Disconnect() end)
+		end
+		table.clear(Characters.conns)
+		local live = Characters.live
+		Characters.live = nil
+		if live then
+			local firstPerson = live.firstPerson
+			for obj in pairs(live.hidden) do
+				pcall(function() obj.LocalTransparencyModifier = firstPerson and 1 or 0 end)
+			end
+			for _, track in pairs(live.tracks) do
+				pcall(function() track:Stop(0) end)
+			end
+		end
+		if Characters.model then
+			pcall(function() Characters.model:Destroy() end)
+			Characters.model = nil
+		end
+end
+
+	function Characters.attach(ready)
+		local model = ready.model:Clone()
+		local fakeRoot = model:FindFirstChild("HumanoidRootPart")
+		local fakeHumanoid = model:FindFirstChildOfClass("Humanoid")
+		if not fakeRoot or not fakeHumanoid then
+			model:Destroy()
+			return false
+		end
+		Characters.model = model
+		local fakeParts, fakeFaces, fakeJoints = {}, {}, {}
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") then
+				table.insert(fakeParts, d)
+			elseif d:IsA("Decal") then
+				table.insert(fakeFaces, d)
+			elseif d:IsA("Motor6D") then
+				fakeJoints[d.Name] = d
+			end
+		end
+		local live = {
+			hidden = {}, tracks = {}, firstPerson = false, character = nil, humanoid = nil, root = nil, head = nil,
+			joints = {}, dirty = true, copy = false, playing = nil, ground = 3, shown = true,
+		}
+		Characters.live = live
+		local animator = fakeHumanoid:FindFirstChildOfClass("Animator")
+		if not animator then
+			animator = Instance.new("Animator")
+			animator.Parent = fakeHumanoid
+		end
+		for slot in pairs(ANIM_SLOTS) do
+			local anim = Instance.new("Animation")
+			anim.AnimationId = ready.anims[slot] or ANIMS[slot]
+			local ok, track = pcall(function()
+				return animator:LoadAnimation(anim)
+			end)
+			if ok and track then
+				pcall(function() track.Looped = slot ~= "jump" end)
+				live.tracks[slot] = track
+			end
+		end
+
+		local charConns = {}
+		local function bind(character)
+			for _, c in ipairs(charConns) do
+				pcall(function() c:Disconnect() end)
+			end
+			table.clear(charConns)
+			for obj in pairs(live.hidden) do
+				pcall(function() obj.LocalTransparencyModifier = 0 end)
+			end
+			table.clear(live.hidden)
+			live.character = character
+			live.humanoid, live.root, live.head = nil, nil, nil
+			live.dirty = true
+			if not character then
+				return
+			end
+			for _, d in ipairs(character:GetDescendants()) do
+				if hideable(d, character) then
+					live.hidden[d] = true
+				end
+			end
+			table.insert(charConns, character.DescendantAdded:Connect(function(d)
+				live.dirty = true
+				if hideable(d, character) then
+					live.hidden[d] = true
+				end
+			end))
+			table.insert(charConns, character.DescendantRemoving:Connect(function(d)
+				live.dirty = true
+				live.hidden[d] = nil
+			end))
+		end
+		table.insert(Characters.conns, { Disconnect = function()
+			for _, c in ipairs(charConns) do
+				pcall(function() c:Disconnect() end)
+			end
+		end })
+
+		local function refresh()
+			local character = live.character
+			live.dirty = false
+			live.humanoid = character:FindFirstChildOfClass("Humanoid")
+			live.root = character:FindFirstChild("HumanoidRootPart")
+			live.head = character:FindFirstChild("Head")
+			table.clear(live.joints)
+			if not live.humanoid or not live.root then
+				live.dirty = true
+				return
+			end
+			live.copy = live.humanoid.RigType == Enum.HumanoidRigType.R15
+			live.ground = groundOf(character, live.humanoid, live.root)
+			if live.copy then
+				for _, d in ipairs(character:GetDescendants()) do
+					if d:IsA("Motor6D") and fakeJoints[d.Name] and not live.joints[d.Name] then
+						live.joints[d.Name] = d
+					end
+				end
+			end
+		end
+
+		local function play(slot, speed)
+			local track = live.tracks[slot]
+			if live.playing ~= slot then
+				local old = live.playing and live.tracks[live.playing]
+				if old then
+					pcall(function() old:Stop(0.15) end)
+				end
+				live.playing = slot
+				if track then
+					pcall(function() track:Play(0.15) end)
+				end
+			end
+			if track and speed then
+				pcall(function() track:AdjustSpeed(speed) end)
+			end
+		end
+
+		local function show(visible)
+			if live.shown == visible then
+				return
+			end
+			live.shown = visible
+			model.Parent = visible and (Workspace.CurrentCamera or Workspace) or nil
+		end
+
+		table.insert(Characters.conns, RunService.Stepped:Connect(function()
+			if Characters.live ~= live then
+				return
+			end
+			for _, part in ipairs(fakeParts) do
+				if part.CanCollide then
+					part.CanCollide = false
+				end
+			end
+			local character = LocalPlayer.Character
+			if character ~= live.character then
+				bind(character)
+			end
+			if not character then
+				return
+			end
+			if live.dirty then
+				refresh()
+			end
+			local humanoid, root = live.humanoid, live.root
+			if not humanoid or not root then
+				return
+			end
+			if live.copy then
+				if live.playing then
+					play(nil)
+				end
+				for name, joint in pairs(live.joints) do
+					local target = fakeJoints[name]
+					if target then
+						target.Transform = joint.Transform
+					end
+				end
+				return
+			end
+			local state = humanoid:GetState()
+			local velocity = root.AssemblyLinearVelocity
+			local speed = Vector3.new(velocity.X, 0, velocity.Z).Magnitude
+			if state == Enum.HumanoidStateType.Jumping then
+				play("jump")
+			elseif state == Enum.HumanoidStateType.Freefall then
+				play("fall")
+			elseif state == Enum.HumanoidStateType.Climbing then
+				play("climb", math.clamp(math.abs(velocity.Y) / 8, 0, 2))
+			elseif state == Enum.HumanoidStateType.Swimming then
+				play("swim", math.clamp(speed / 10, 0.3, 2))
+			elseif speed > 0.75 then
+				play("run", math.clamp(speed / 16, 0.4, 2.5))
+			else
+				play("idle", 1)
+			end
+		end))
+
+		pcall(function() RunService:UnbindFromRenderStep(RENDER_NAME) end)
+		RunService:BindToRenderStep(RENDER_NAME, Enum.RenderPriority.Last.Value, function()
+			if Characters.live ~= live then
+				return
+			end
+			local root = live.root
+			if not live.character or not root or not root.Parent then
+				show(false)
+				return
+			end
+			show(true)
+			local camera = Workspace.CurrentCamera
+			if model.Parent ~= camera and camera then
+				model.Parent = camera
+			end
+			fakeRoot.CFrame = root.CFrame * CFrame.new(0, ready.ground - live.ground, 0)
+			for obj in pairs(live.hidden) do
+				if obj.LocalTransparencyModifier ~= 1 then
+					obj.LocalTransparencyModifier = 1
+				end
+			end
+			local head = live.head
+			local firstPerson = camera ~= nil and head ~= nil and head.Parent ~= nil
+				and (camera.CFrame.Position - head.Position).Magnitude < 1.5
+			if firstPerson ~= live.firstPerson then
+				live.firstPerson = firstPerson
+				local value = firstPerson and 1 or 0
+				for _, part in ipairs(fakeParts) do
+					part.LocalTransparencyModifier = value
+				end
+				for _, face in ipairs(fakeFaces) do
+					pcall(function() face.LocalTransparencyModifier = value end)
+				end
+			end
+		end)
+		live.shown = false
+		bind(LocalPlayer.Character)
+		return true
+end
+
+	function Characters.apply()
+		Characters.token = Characters.token + 1
+		local token = Characters.token
+		Characters.clear()
+		if not Characters.on then
+			return
+		end
+		local id, custom = Characters.wanted()
+		if not id then
+			notify(custom and "That isn't a bundle link" or "Pick a character")
+			return
+		end
+		task.spawn(function()
+			local ready = Characters.template(id)
+			if token ~= Characters.token or not Characters.on then
+				return
+			end
+			if not ready then
+				notify("Couldn't load that character")
+				return
+			end
+			local ok, done = pcall(Characters.attach, ready)
+			if not ok or not done then
+				Characters.clear()
+				notify("Couldn't wear that character")
+			end
+		end)
+end
+
+	function Library:AddCharacterBox(target)
+		if self.Options.CharWear or type(target) ~= "table" then
+			return nil
+		end
+		local box = type(target.AddLeftGroupbox) == "function" and target:AddLeftGroupbox("Custom Characters") or target
+		box:AddDropdown("CharPreset", { Text = "Character", Values = PRESET_NAMES, Default = PRESET_NAMES[1], Callback = function()
+			if not Library._applyingConfig and customText() ~= "" and Library.Options.CharCustom then
+				Library.Options.CharCustom:SetValue("")
+				return
+			end
+			if Characters.on then
+				Characters.apply()
+			end
+		end })
+		box:AddInput("CharCustom", { Text = "Custom Character", Default = "", Placeholder = "roblox.com/bundles/...", Finished = true, Callback = function()
+			if Characters.on then
+				Characters.apply()
+			end
+		end })
+		box:AddToggle("CharWear", { Text = "Wear Character", Default = false, Callback = function(value)
+			Characters.on = value == true
+			Characters.apply()
+		end })
+		Library:OnUnload(function()
+			Characters.on = false
+			Characters.token = Characters.token + 1
+			Characters.clear()
+			for id, ready in pairs(Characters.templates) do
+				pcall(function() ready.model:Destroy() end)
+				Characters.templates[id] = nil
+			end
+		end)
+		return box
+end
+	Library.Characters = Characters
+end
+
 function Library:BuildSettingsTab(window, name, section)
 	if section ~= false and window.AddSection and window.Section ~= (section or "Other") then
 		window:AddSection(section or "Other")
@@ -7132,6 +7701,7 @@ function Library:BuildSettingsTab(window, name, section)
 			Library:Unload()
 		end,
 	})
+	pcall(Library.AddCharacterBox, Library, Tab)
 
 	local Configs = Tab:AddRightGroupbox("Configs")
 	if not hasFileApi() then
