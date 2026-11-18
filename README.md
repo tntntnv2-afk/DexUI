@@ -119,6 +119,7 @@ Some handy names: `house`, `sprout`, `swords`, `sword`, `crosshair`, `map-pin`, 
 - `Library:SetTheme({ ... })` changes theme colours. The accent stays Dexori blue.
 - `Library:SaveConfig(name)`, `LoadConfig`, `DeleteConfig`, `ListConfigs`, `SetAutoload`, `LoadAutoload`. `LoadConfig` returns `true, applied, skipped`; values of the wrong type are skipped, not applied.
 - Menu key, UI scale, watermark and keybind list are the player's own settings. They are saved in `<folder>/menu.json`, not in configs, so loading a shared config never changes them.
+- Settings → Menu has **Disable 3D render**, which turns off the game's 3D drawing to save GPU while the menu keeps working. It is saved in configs (option `DexNoRender`) and turned back on when the menu unloads.
 - `Library:OnUnload(fn)` and `Library:Unload()`
 
 ## Target card

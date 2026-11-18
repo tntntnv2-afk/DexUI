@@ -6919,6 +6919,9 @@ function Library:LoadConfig(name)
 		pcall(self.Options[id].SetValue, self.Options[id], value)
 		applied = applied + 1
 	end
+	if self._afterConfig then
+		pcall(self._afterConfig)
+	end
 	self.CurrentConfig = name
 	return true, applied, skipped
 end
@@ -7694,6 +7697,36 @@ function Library:BuildSettingsTab(window, name, section)
 			end
 		end,
 	}).MenuSetting = true
+	local renderOff = false
+	local function setRenderOff(off)
+		off = off == true and not Library.Unloaded
+		if off ~= renderOff then
+			renderOff = off
+			pcall(function()
+				RunService:Set3dRenderingEnabled(not off)
+			end)
+		end
+	end
+	Menu:AddToggle("DexNoRender", {
+		Text = "Disable 3D render",
+		Default = false,
+		Callback = setRenderOff,
+	})
+	Library._afterConfig = function()
+		if renderOff then
+			pcall(function()
+				RunService:Set3dRenderingEnabled(false)
+			end)
+		end
+	end
+	Library:OnUnload(function()
+		if renderOff then
+			renderOff = false
+			pcall(function()
+				RunService:Set3dRenderingEnabled(true)
+			end)
+		end
+	end)
 	Menu:AddDivider()
 	Menu:AddButton({
 		Text = "Unload",
