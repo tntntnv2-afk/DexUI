@@ -171,22 +171,6 @@ local function refreshLive()
 	}, "\n"))
 end
 
-local ChatDemo = Tabs.Inputs:AddLeftGroupbox("Chat box")
-local chatBox
-chatBox = ChatDemo:AddChat({
-	Height = 210,
-	Rooms = { "Global", "Trade" },
-	Status = "3 online",
-	OnSend = function(message, room)
-		chatBox:AddMessage({ room = room, name = "You", text = message, own = true })
-	end,
-})
-chatBox:AddMessage({ room = "Global", name = "Mira", text = "Anyone up for a dungeon run?" })
-chatBox:AddMessage({ room = "Global", name = "Kado", badge = "staff", text = "Patch notes are in the changelog tab." })
-chatBox:AddMessage({ room = "Global", name = "You", text = "Give me two minutes.", own = true })
-chatBox:Notice("This box is only the display. Your script decides where messages go.")
-chatBox:AddMessage({ room = "Trade", name = "Rin", text = "Selling a spare ember blade." })
-
 local Keys = Tabs.Inputs:AddRightGroupbox("Keybinds")
 local KeyLabel = Keys:AddLabel("Keys: G, H, J")
 Keys:AddKeybind("DemoToggleKey", {
