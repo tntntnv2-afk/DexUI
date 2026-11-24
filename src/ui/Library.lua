@@ -2096,7 +2096,7 @@ function Elements:AddChat(opts)
 	opts = opts or {}
 	local Holder = self:_holder(math.max(tonumber(opts.Height) or 240, 140))
 	local limit = math.clamp(math.floor(tonumber(opts.MaxLength) or 200), 20, 500)
-	local keep = math.clamp(math.floor(tonumber(opts.History) or 60), 5, 200)
+	local keep = math.clamp(math.floor(tonumber(opts.History) or 60), 10, 200)
 	local cooldown = math.max(tonumber(opts.Cooldown) or 1, 0)
 	local sendHandler = opts.OnSend
 	local enabled = opts.Enabled ~= false
@@ -6771,17 +6771,6 @@ function Library:CreateWindow(info)
 			end
 		end
 
-		local selectedHooks = {}
-		function Tab:OnSelected(fn)
-			if type(fn) ~= "function" then
-				return
-			end
-			table.insert(selectedHooks, fn)
-			if selected then
-				fire(fn)
-			end
-		end
-
 		function Tab._setSelected(state)
 			local was = selected
 			selected = state
@@ -6792,9 +6781,6 @@ function Library:CreateWindow(info)
 				Cover.BackgroundTransparency = 0
 				tween(Cover, { BackgroundTransparency = 1 }, COVER_IN)
 				scrollIntoView(Button)
-				for _, fn in ipairs(selectedHooks) do
-					fire(fn)
-				end
 			end
 			paint()
 		end
@@ -7949,8 +7935,6 @@ end
 end
 	Library.Characters = Characters
 end
-
-Library.Features = { Chat = true, TabSelected = true }
 
 function Library:BuildSettingsTab(window, name, section)
 	if section ~= false and window.AddSection and window.Section ~= (section or "Other") then
